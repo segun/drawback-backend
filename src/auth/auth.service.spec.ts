@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -99,6 +95,7 @@ describe('AuthService', () => {
       expect(mailService.sendActivationEmail).toHaveBeenCalledWith(
         'alice@example.com',
         expect.any(String),
+        expect.any(String),
       );
       expect(result.message).toMatch(/check your email/i);
     });
@@ -138,15 +135,18 @@ describe('AuthService', () => {
 
       expect(user.isActivated).toBe(true);
       expect(user.activationToken).toBeNull();
-      expect(result.message).toMatch(/activated/i);
+      expect(result.success).toBe(true);
+      expect(result.email).toBe('alice@example.com');
     });
 
-    it('throws BadRequestException for invalid token', async () => {
+    it('returns failure response for invalid token', async () => {
       usersRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.confirmEmail('bad-token')).rejects.toThrow(
-        BadRequestException,
-      );
+      const result = await service.confirmEmail('bad-token');
+
+      expect(result.success).toBe(false);
+      expect(result.email).toBeNull();
+      expect(result.reason).toMatch(/invalid or expired/i);
     });
   });
 

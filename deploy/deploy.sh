@@ -35,6 +35,19 @@ has_non_empty_env_value() {
     grep -Eq "^${key}=.+" "$env_file"
 }
 
+# Resolve docker compose command: prefer plugin (v2), fall back to standalone (v1)
+docker_compose() {
+    if docker compose version &>/dev/null 2>&1; then
+        docker compose "$@"
+    elif command -v docker-compose &>/dev/null; then
+        docker-compose "$@"
+    else
+        log_error "Neither 'docker compose' (v2 plugin) nor 'docker-compose' (v1) is available."
+        log_error "Install the Compose plugin: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
+}
+
 ensure_git_upstream() {
     local branch
     branch=$(git rev-parse --abbrev-ref HEAD)
@@ -102,7 +115,7 @@ if is_true "$AUTO_START_DOCKER_SERVICES"; then
         log_info "Ensuring required docker services are running..."
 
         if [ -f "$DEPLOY_DIR/docker-compose.yml" ]; then
-            docker compose --env-file "$REPO_ROOT/.env" -f "$DEPLOY_DIR/docker-compose.yml" up -d --remove-orphans
+            docker_compose --env-file "$REPO_ROOT/.env" -f "$DEPLOY_DIR/docker-compose.yml" up -d --remove-orphans
         fi
     fi
 fi
