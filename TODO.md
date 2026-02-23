@@ -1,0 +1,1 @@
+- [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.

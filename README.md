@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DrawkcaB Backend (NestJS)
 
-## Getting Started
+Backend-only API + WebSocket server for DrawkcaB.
 
-First, run the development server:
+## Stack
+
+- NestJS 11
+- MySQL via TypeORM
+- Socket.IO for realtime chat notifications + drawing sync
+- Optional Redis Socket.IO adapter for horizontal scaling
+
+## Setup
+
+1. Copy `.env.example` to `.env`.
+2. Set MySQL config values.
+3. Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+yarn install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Start dev server:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+yarn start:dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## REST API
 
-## Learn More
+- `POST /users/register` body: `{ number, name? }`
+- `PATCH /users/:id/mode` body: `{ mode: "PUBLIC" | "PRIVATE" }`
+- `GET /users/public?excludeUserId=<uuid>`
+- `GET /users/search?number=<phone>`
+- `POST /chat/requests` body: `{ fromUserId, toNumber }`
+- `POST /chat/requests/:requestId/respond` body: `{ responderUserId, accept }`
 
-To learn more about Next.js, take a look at the following resources:
+## WebSocket
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Namespace: `/drawback`
+- Connect with `auth.userId` (or query `userId`)
+- Events:
+  - client → server: `chat.join` `{ requestId, userId }`
+  - client → server: `draw.stroke` `{ requestId, userId, stroke }`
+  - client → server: `draw.clear` `{ requestId, userId }`
+  - server → client: `chat.requested`
+  - server → client: `chat.response`
+  - server → client: `draw.stroke`
+  - server → client: `draw.clear`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Redis and queue guidance
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Queue: not needed for current MVP.
+- Redis: optional now, recommended when running multiple backend instances (set `REDIS_URL` to enable Socket.IO adapter).
