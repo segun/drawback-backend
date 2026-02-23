@@ -1,0 +1,118 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: drawback_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: drawback_test
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_SECRET: test-secret-for-ci
+      MAIL_HOST: localhost
+      MAIL_PORT: 1025
+      MAIL_USER: ""
+      MAIL_PASS: ""
+      MAIL_FROM: noreply@drawback.chat
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run unit tests
+        run: yarn test
+
+      - name: Run e2e tests
+        run: yarn test:e2e
+
+      - name: Build application
+        run: yarn build
+
+  deploy:
+    name: Deploy to ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - branch: dev
+            host_secret: DO_SSH_HOST_DEV
+            url: https://dev.drawback.chat/api
+          - branch: master
+            host_secret: DO_SSH_HOST_PROD
+            url: https://drawback.chat/api
+
+    steps:
+      - name: Deploy via SSH
+        if: github.ref_name == matrix.branch
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets[matrix.host_secret] }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            node -v
+            cd /opt/drawback/backend
+            git fetch origin ${{ matrix.branch }}
+            git reset --hard origin/${{ matrix.branch }}
+            ./deploy/deploy.sh
+
+      - name: Health Check
+        if: github.ref_name == matrix.branch
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets[matrix.host_secret] }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            echo "⏳ Waiting for app to start..."
+            sleep 10
+            echo "🏥 Running health check..."
+            curl -f ${{ matrix.url }} || exit 1
+            echo "✅ Application is healthy!"
