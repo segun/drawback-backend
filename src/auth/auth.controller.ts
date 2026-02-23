@@ -22,23 +22,31 @@ export class AuthController {
   @Get('confirm/:token')
   @Redirect()
   async confirm(@Param('token') token: string) {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:5173');
+    const frontendUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
     const base = `${frontendUrl}/confirm`;
     const result = await this.authService.confirmEmail(token);
 
     if (result.success) {
-      const email = encodeURIComponent(result.email!);
+      const email = encodeURIComponent(result.email as string);
       return { url: `${base}?status=success&email=${email}`, statusCode: 302 };
     }
 
-    const reason = encodeURIComponent(result.reason ?? 'Unknown error');
-    const emailParam = result.email ? `&email=${encodeURIComponent(result.email)}` : '';
-    return { url: `${base}?status=error&reason=${reason}${emailParam}`, statusCode: 302 };
+    const reason = encodeURIComponent(String(result.reason ?? 'Unknown error'));
+    const emailParam = result.email
+      ? `&email=${encodeURIComponent(String(result.email))}`
+      : '';
+    return {
+      url: `${base}?status=error&reason=${reason}${emailParam}`,
+      statusCode: 302,
+    };
   }
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @Post('resend-confirmation')
-  resendConfirmation(@Body() dto: ResendConfirmationDto) {
+  resendConfirmation(
+    @Body() dto: ResendConfirmationDto,
+  ): Promise<{ message: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
     return this.authService.resendConfirmationEmail(dto);
   }
 

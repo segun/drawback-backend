@@ -51,12 +51,12 @@ export class MailService {
     token: string,
     displayName: string,
   ): Promise<void> {
-    const confirmUrl = `${this.appUrl}/auth/confirm/${token}`;
+    const confirmUrl = `${this.config.get<string>('EMAIL_CONFIRM_URL')}/${token}`;
     const appName = this.config.get<string>('APP_NAME') ?? 'Drawback';
-    const supportEmail =
-      this.config.get<string>('MAIL_SUPPORT') ?? this.from;
+    const supportEmail = this.config.get<string>('MAIL_SUPPORT') ?? this.from;
     const logoUrl = this.config.get<string>('APP_LOGO_URL') ?? '';
-    const expiresInHours = this.config.get<string>('ACTIVATION_EXPIRES_HOURS') ?? '24';
+    const expiresInHours =
+      this.config.get<string>('ACTIVATION_EXPIRES_HOURS') ?? '24';
 
     const templatePath = path.join(
       __dirname,

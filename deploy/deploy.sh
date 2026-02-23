@@ -144,16 +144,6 @@ pm2 restart drawback-backend \
 
 pm2 save
 
-# Update nginx config
-if [ -f "$DEPLOY_DIR/nginx/default" ]; then
-    log_info "Updating nginx config..."
-    sudo cp "$DEPLOY_DIR/nginx/default" /etc/nginx/sites-available/default
-    sudo nginx -t && sudo systemctl reload nginx
-    log_info "nginx reloaded."
-else
-    log_warn "deploy/nginx/default not found — skipping nginx update."
-fi
-
 log_info "Backend deployment complete"
 echo ""
 echo "Backend status:"
