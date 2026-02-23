@@ -11,10 +11,20 @@ export class MailService {
   private readonly transporter: Transporter;
   private readonly from: string;
   private readonly appUrl: string;
+  private readonly appName: string;
+  private readonly supportEmail: string;
+  private readonly logoUrl: string;
+  private readonly expiresInHours: string;
+  private readonly emailConfirmUrl: string;
 
   constructor(private readonly config: ConfigService) {
     this.from = this.require('MAIL_FROM');
     this.appUrl = this.require('APP_URL');
+    this.appName = this.require('APP_NAME');
+    this.supportEmail = this.require('MAIL_SUPPORT');
+    this.logoUrl = this.require('APP_LOGO_URL');
+    this.expiresInHours = this.require('ACTIVATION_EXPIRES_HOURS');
+    this.emailConfirmUrl = this.require('EMAIL_CONFIRM_URL');
 
     this.transporter = nodemailer.createTransport({
       host: this.require('SMTP_HOST'),
@@ -51,12 +61,8 @@ export class MailService {
     token: string,
     displayName: string,
   ): Promise<void> {
-    const confirmUrl = `${this.config.get<string>('EMAIL_CONFIRM_URL')}/${token}`;
-    const appName = this.config.get<string>('APP_NAME') ?? 'Drawback';
-    const supportEmail = this.config.get<string>('MAIL_SUPPORT') ?? this.from;
-    const logoUrl = this.config.get<string>('APP_LOGO_URL') ?? '';
-    const expiresInHours =
-      this.config.get<string>('ACTIVATION_EXPIRES_HOURS') ?? '24';
+    const confirmUrl = `${this.emailConfirmUrl}/${token}`;
+    const { appName, supportEmail, logoUrl, expiresInHours } = this;
 
     const templatePath = path.join(
       __dirname,
