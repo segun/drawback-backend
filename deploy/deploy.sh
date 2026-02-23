@@ -116,6 +116,19 @@ if is_true "$AUTO_START_DOCKER_SERVICES"; then
 
         if [ -f "$DEPLOY_DIR/docker-compose.yml" ]; then
             docker_compose --env-file "$REPO_ROOT/.env" -f "$DEPLOY_DIR/docker-compose.yml" up -d --remove-orphans
+
+            log_info "Waiting for MySQL to be ready..."
+            timeout=60
+            elapsed=0
+            until docker exec drawback_mysql mysqladmin ping -h 127.0.0.1 --silent &>/dev/null; do
+                if [ "$elapsed" -ge "$timeout" ]; then
+                    log_error "MySQL did not become ready within ${timeout}s. Aborting."
+                    exit 1
+                fi
+                sleep 2
+                elapsed=$((elapsed + 2))
+            done
+            log_info "MySQL is ready."
         fi
     fi
 fi
