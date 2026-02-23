@@ -3,7 +3,7 @@
 Backend-only API + WebSocket server for DrawkcaB.
 
 ## Stack
-
+- yarn
 - NestJS 11
 - MySQL via TypeORM
 - Socket.IO for realtime chat notifications + drawing sync

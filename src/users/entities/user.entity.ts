@@ -28,14 +28,14 @@ export class User {
   isActivated!: boolean;
 
   @Exclude()
-  @Column({ nullable: true, length: 128 })
+  @Column({ type: 'varchar', nullable: true, length: 128 })
   activationToken!: string | null;
 
   @Column({ type: 'enum', enum: UserMode, default: UserMode.PRIVATE })
   mode!: UserMode;
 
   @Exclude()
-  @Column({ nullable: true, length: 128 })
+  @Column({ type: 'varchar', nullable: true, length: 128 })
   socketId!: string | null;
 
   @CreateDateColumn()

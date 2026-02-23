@@ -18,16 +18,28 @@ import { UsersModule } from './users/users.module';
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'mysql',
-        host: config.get<string>('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 3306),
-        username: config.get<string>('DB_USER', 'root'),
-        password: config.get<string>('DB_PASSWORD', ''),
-        database: config.get<string>('DB_NAME', 'drawback'),
-        synchronize: config.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
-        autoLoadEntities: true,
-      }),
+      useFactory: (config: ConfigService) => {
+        const require = (key: string): string => {
+          const value = config.get<string>(key);
+          if (value === undefined || value === null || value === '') {
+            throw new Error(`Missing required environment variable: ${key}`);
+          }
+          return value;
+        };
+
+        return {
+          type: 'mysql',
+          host: require('DB_HOST'),
+          port: Number(require('DB_PORT')),
+          username: require('DB_USER'),
+          password: require('DB_PASSWORD'),
+          database: require('DB_NAME'),
+          synchronize: false,
+          migrations: ['dist/migrations/*.js'],
+          migrationsRun: false,
+          autoLoadEntities: true,
+        };
+      },
     }),
     MailModule,
     AuthModule,

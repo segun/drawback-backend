@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -14,6 +13,7 @@ import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -53,7 +53,11 @@ export class AuthService {
     });
 
     await this.usersRepository.save(user);
-    await this.mailService.sendActivationEmail(user.email, activationToken);
+    await this.mailService.sendActivationEmail(
+      user.email,
+      activationToken,
+      user.displayName,
+    );
 
     return {
       message:
@@ -61,20 +65,48 @@ export class AuthService {
     };
   }
 
-  async confirmEmail(token: string): Promise<{ message: string }> {
+  async confirmEmail(
+    token: string,
+  ): Promise<{ success: boolean; email: string | null; reason?: string }> {
     const user = await this.usersRepository.findOne({
       where: { activationToken: token },
     });
 
     if (!user) {
-      throw new BadRequestException('Invalid or expired activation token');
+      return { success: false, email: null, reason: 'Invalid or expired activation token' };
+    }
+
+    if (user.isActivated) {
+      return { success: false, email: user.email, reason: 'Account is already activated' };
     }
 
     user.isActivated = true;
     user.activationToken = null;
     await this.usersRepository.save(user);
 
-    return { message: 'Account activated. You can now log in.' };
+    return { success: true, email: user.email };
+  }
+
+  async resendConfirmationEmail(dto: ResendConfirmationDto): Promise<{ message: string }> {
+    const generic = { message: 'If that email exists and is unactivated, a new confirmation link has been sent.' };
+
+    const user = await this.usersRepository.findOne({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    if (!user || user.isActivated) {
+      return generic;
+    }
+
+    user.activationToken = randomUUID();
+    await this.usersRepository.save(user);
+    await this.mailService.sendActivationEmail(
+      user.email,
+      user.activationToken!,
+      user.displayName,
+    );
+
+    return generic;
   }
 
   async login(dto: LoginDto): Promise<{ accessToken: string }> {

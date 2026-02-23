@@ -7,6 +7,7 @@ import {
   ValidationPipe,
   forwardRef,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -17,7 +18,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { createAdapter } from '@socket.io/redis-adapter';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from '../chat/chat.service';
@@ -52,20 +53,33 @@ export class DrawGateway
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
+    private readonly config: ConfigService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL;
+  onModuleInit(): void {
+    const redisHost = this.config.get<string>('REDIS_HOST');
 
-    if (!redisUrl) {
+    if (!redisHost) {
+      this.logger.log('REDIS_HOST not set — Redis adapter disabled');
       return;
     }
 
-    const pubClient = new Redis(redisUrl);
+    const redisPort = Number(this.config.get<string>('REDIS_PORT') ?? 6379);
+    const redisPassword = this.config.get<string>('REDIS_PASSWORD');
+
+    const redisOptions: RedisOptions = {
+      host: redisHost,
+      port: redisPort,
+      ...(redisPassword ? { password: redisPassword } : {}),
+    };
+
+    const pubClient = new Redis(redisOptions);
     const subClient = pubClient.duplicate();
 
     this.server.adapter(createAdapter(pubClient, subClient));
-    this.logger.log('Socket.IO Redis adapter enabled');
+    this.logger.log(
+      `Socket.IO Redis adapter enabled (${redisHost}:${redisPort})`,
+    );
   }
 
   async handleConnection(client: Socket): Promise<void> {
@@ -216,10 +230,11 @@ export class DrawGateway
   }
 
   private extractUserIdFromToken(client: Socket): string | null {
-    const token =
-      client.handshake.auth?.token ??
+    const auth = client.handshake.auth as Record<string, string | undefined>;
+    const token: string | string[] | undefined =
+      auth['token'] ??
       client.handshake.headers?.authorization?.replace('Bearer ', '') ??
-      client.handshake.query?.token;
+      client.handshake.query?.['token'];
 
     if (!token || typeof token !== 'string') {
       return null;
@@ -244,8 +259,7 @@ export class DrawGateway
   private emitError(client: Socket, err: unknown): void {
     const message =
       err instanceof Error ? err.message : 'An unexpected error occurred';
-    const status =
-      (err as { status?: number })?.status ?? 500;
+    const status = (err as { status?: number })?.status ?? 500;
     client.emit('error', { message, status });
     this.logger.warn(`Socket error [${client.id}]: ${message}`);
   }
