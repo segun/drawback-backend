@@ -124,11 +124,11 @@ export class DrawGateway
   }
 
   notifyChatRequested(userId: string, payload: Record<string, unknown>): void {
-    this.emitToUser(userId, 'chat.requested', payload);
+    void this.emitToUser(userId, 'chat.requested', payload);
   }
 
   notifyChatResponse(userId: string, payload: Record<string, unknown>): void {
-    this.emitToUser(userId, 'chat.response', payload);
+    void this.emitToUser(userId, 'chat.response', payload);
   }
 
   @SubscribeMessage('chat.join')
@@ -215,14 +215,30 @@ export class DrawGateway
     }
   }
 
-  private emitToUser(
+  private async emitToUser(
     userId: string,
     event: string,
     payload: Record<string, unknown>,
-  ): void {
-    const socketId = this.userToSocket.get(userId);
+  ): Promise<void> {
+    // Prefer the in-memory map (fast path); fall back to the DB-persisted
+    // socketId so notifications survive a server restart where the map is
+    // cleared but connected clients retain their socket IDs.
+    let socketId = this.userToSocket.get(userId);
 
     if (!socketId) {
+      try {
+        const user = await this.usersService.findById(userId);
+        socketId = user.socketId ?? undefined;
+      } catch {
+        // user not found — nothing to emit
+        return;
+      }
+    }
+
+    if (!socketId) {
+      this.logger.debug(
+        `emitToUser: no socket found for user ${userId}, event '${event}' dropped`,
+      );
       return;
     }
 
