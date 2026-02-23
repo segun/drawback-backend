@@ -1,6 +1,8 @@
 import {
+  ForbiddenException,
   Inject,
   Logger,
+  OnModuleDestroy,
   OnModuleInit,
   UnauthorizedException,
   UsePipes,
@@ -28,6 +30,15 @@ import { DrawClearDto } from './dto/draw-clear.dto';
 import { DrawStrokeDto } from './dto/draw-stroke.dto';
 import { JoinChatDto } from './dto/join-chat.dto';
 
+/** Max draw.stroke events allowed per socket per second. */
+const STROKE_RATE_LIMIT = 60;
+/** Max draw.clear events allowed per socket per 5 seconds. */
+const CLEAR_RATE_LIMIT = 5;
+const CLEAR_RATE_WINDOW_MS = 5_000;
+
+/** Redis key prefix for the user→socketId mapping shared across all workers. */
+const USER_SOCKET_KEY = 'drawback:user-socket';
+
 @WebSocketGateway({
   namespace: '/drawback',
   cors: {
@@ -37,16 +48,51 @@ import { JoinChatDto } from './dto/join-chat.dto';
 })
 @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
 export class DrawGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
 {
   private readonly logger = new Logger(DrawGateway.name);
-  private readonly userToSocket = new Map<string, string>();
+
+  /**
+   * Local cache of socketId → userId for the sockets connected to *this*
+   * process. Used only for cheap O(1) lookups on the hot path — not relied on
+   * for cross-process emission (Redis handles that).
+   */
   private readonly socketToUser = new Map<string, string>();
+
   /** tracks which room (if any) each socket has joined */
   private readonly socketToRoom = new Map<string, string>();
 
+  /**
+   * Per-socket stroke rate limiting: socketId → { count, windowStart }.
+   * Resets every second.
+   */
+  private readonly strokeRateMap = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
+
+  /**
+   * Per-socket clear rate limiting: socketId → { count, windowStart }.
+   * Resets every CLEAR_RATE_WINDOW_MS.
+   */
+  private readonly clearRateMap = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
+
   @WebSocketServer()
   server!: Server;
+
+  /**
+   * Shared Redis client used for the user→socket hash and (when configured)
+   * as the pub/sub pub client. Kept as an instance property so it can be
+   * reused by emitToUser without creating extra connections.
+   */
+  private redisClient: Redis | null = null;
 
   constructor(
     private readonly usersService: UsersService,
@@ -60,7 +106,10 @@ export class DrawGateway
     const redisHost = this.config.get<string>('REDIS_HOST');
 
     if (!redisHost) {
-      this.logger.log('REDIS_HOST not set — Redis adapter disabled');
+      this.logger.warn(
+        'REDIS_HOST not set — Redis adapter disabled. ' +
+          'Running without Redis is only suitable for single-process development.',
+      );
       return;
     }
 
@@ -71,15 +120,23 @@ export class DrawGateway
       host: redisHost,
       port: redisPort,
       ...(redisPassword ? { password: redisPassword } : {}),
+      // Reconnect aggressively so a blip doesn't permanently break the adapter.
+      retryStrategy: (times) => Math.min(times * 100, 3_000),
     };
 
-    const pubClient = new Redis(redisOptions);
-    const subClient = pubClient.duplicate();
+    this.redisClient = new Redis(redisOptions);
+    const subClient = this.redisClient.duplicate();
 
-    this.server.adapter(createAdapter(pubClient, subClient));
+    this.server.adapter(createAdapter(this.redisClient, subClient));
     this.logger.log(
       `Socket.IO Redis adapter enabled (${redisHost}:${redisPort})`,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redisClient) {
+      await this.redisClient.quit();
+    }
   }
 
   async handleConnection(client: Socket): Promise<void> {
@@ -91,10 +148,13 @@ export class DrawGateway
       return;
     }
 
-    this.userToSocket.set(userId, client.id);
     this.socketToUser.set(client.id, userId);
 
-    await this.usersService.setSocket(userId, client.id);
+    // Persist user→socket in Redis (shared across all processes/workers).
+    if (this.redisClient) {
+      await this.redisClient.hset(USER_SOCKET_KEY, userId, client.id);
+    }
+
     this.logger.debug(`Socket connected: ${client.id} for user ${userId}`);
   }
 
@@ -113,13 +173,19 @@ export class DrawGateway
     }
 
     this.socketToUser.delete(client.id);
+    this.strokeRateMap.delete(client.id);
+    this.clearRateMap.delete(client.id);
 
-    const currentSocket = this.userToSocket.get(userId);
-    if (currentSocket === client.id) {
-      this.userToSocket.delete(userId);
+    // Remove from Redis only if this socket is still the current one for the
+    // user (guards against a reconnect on another worker overwriting then being
+    // incorrectly cleared here).
+    if (this.redisClient) {
+      const current = await this.redisClient.hget(USER_SOCKET_KEY, userId);
+      if (current === client.id) {
+        await this.redisClient.hdel(USER_SOCKET_KEY, userId);
+      }
     }
 
-    await this.usersService.clearSocket(userId, client.id);
     this.logger.debug(`Socket disconnected: ${client.id} for user ${userId}`);
   }
 
@@ -189,59 +255,72 @@ export class DrawGateway
   }
 
   @SubscribeMessage('draw.stroke')
-  async drawStroke(
+  drawStroke(
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: DrawStrokeDto,
-  ): Promise<void> {
-    try {
-      const userId = this.getAuthenticatedUserId(client);
-
-      const roomId = await this.chatService.getAcceptedRoomForUser(
-        dto.requestId,
-        userId,
-      );
-
-      client.to(roomId).emit('draw.stroke', dto);
-    } catch (err) {
-      this.emitError(client, err);
+  ): void {
+    // Rate limit: max STROKE_RATE_LIMIT strokes per second per socket.
+    if (this.isStrokeRateLimited(client.id)) {
+      return; // silently drop — don't disconnect, just shed the load
     }
+
+    // Use the cached room — validated once during chat.join.
+    // No DB query needed on the hot drawing path.
+    const room = this.socketToRoom.get(client.id);
+    if (!room) {
+      this.emitError(client, new ForbiddenException('Not in a room'));
+      return;
+    }
+
+    client.to(room).emit('draw.stroke', dto);
   }
 
   @SubscribeMessage('draw.clear')
-  async clearCanvas(
+  clearCanvas(
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: DrawClearDto,
-  ): Promise<void> {
-    try {
-      const userId = this.getAuthenticatedUserId(client);
-
-      const roomId = await this.chatService.getAcceptedRoomForUser(
-        dto.requestId,
-        userId,
+  ): void {
+    // Rate limit: max CLEAR_RATE_LIMIT clears per CLEAR_RATE_WINDOW_MS per socket.
+    if (this.isClearRateLimited(client.id)) {
+      this.emitError(
+        client,
+        new ForbiddenException(
+          `Too many clear events. Max ${CLEAR_RATE_LIMIT} per ${CLEAR_RATE_WINDOW_MS / 1000}s.`,
+        ),
       );
-
-      client.to(roomId).emit('draw.clear', dto);
-    } catch (err) {
-      this.emitError(client, err);
+      return;
     }
+
+    const room = this.socketToRoom.get(client.id);
+    if (!room) {
+      this.emitError(client, new ForbiddenException('Not in a room'));
+      return;
+    }
+
+    client.to(room).emit('draw.clear', dto);
   }
 
+  /**
+   * Emit an event to a specific user. Looks up the socket ID from Redis
+   * (shared across all workers) so this works correctly in a multi-process
+   * deployment. Falls back to the DB-persisted socketId only when Redis is
+   * not configured.
+   */
   private async emitToUser(
     userId: string,
     event: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    // Prefer the in-memory map (fast path); fall back to the DB-persisted
-    // socketId so notifications survive a server restart where the map is
-    // cleared but connected clients retain their socket IDs.
-    let socketId = this.userToSocket.get(userId);
+    let socketId: string | null | undefined;
 
-    if (!socketId) {
+    if (this.redisClient) {
+      socketId = await this.redisClient.hget(USER_SOCKET_KEY, userId);
+    } else {
+      // No Redis — fall back to DB-persisted socketId (single-process only).
       try {
         const user = await this.usersService.findById(userId);
         socketId = user.socketId ?? undefined;
       } catch {
-        // user not found — nothing to emit
         return;
       }
     }
@@ -255,6 +334,53 @@ export class DrawGateway
 
     this.server.to(socketId).emit(event, payload);
   }
+
+  // ---------------------------------------------------------------------------
+  // Rate limiting helpers
+  // ---------------------------------------------------------------------------
+
+  private isStrokeRateLimited(socketId: string): boolean {
+    const now = Date.now();
+    const entry = this.strokeRateMap.get(socketId) ?? {
+      count: 0,
+      windowStart: now,
+    };
+
+    if (now - entry.windowStart >= 1_000) {
+      // New 1-second window
+      entry.count = 1;
+      entry.windowStart = now;
+      this.strokeRateMap.set(socketId, entry);
+      return false;
+    }
+
+    entry.count++;
+    this.strokeRateMap.set(socketId, entry);
+    return entry.count > STROKE_RATE_LIMIT;
+  }
+
+  private isClearRateLimited(socketId: string): boolean {
+    const now = Date.now();
+    const entry = this.clearRateMap.get(socketId) ?? {
+      count: 0,
+      windowStart: now,
+    };
+
+    if (now - entry.windowStart >= CLEAR_RATE_WINDOW_MS) {
+      entry.count = 1;
+      entry.windowStart = now;
+      this.clearRateMap.set(socketId, entry);
+      return false;
+    }
+
+    entry.count++;
+    this.clearRateMap.set(socketId, entry);
+    return entry.count > CLEAR_RATE_LIMIT;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
 
   private extractUserIdFromToken(client: Socket): string | null {
     const auth = client.handshake.auth as Record<string, string | undefined>;

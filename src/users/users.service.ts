@@ -146,17 +146,4 @@ export class UsersService {
     return count > 0;
   }
 
-  async setSocket(userId: string, socketId: string): Promise<void> {
-    await this.usersRepository.update({ id: userId }, { socketId });
-  }
-
-  async clearSocket(userId: string, socketId: string): Promise<void> {
-    await this.usersRepository
-      .createQueryBuilder()
-      .update(User)
-      .set({ socketId: null })
-      .where('id = :userId', { userId })
-      .andWhere('socketId = :socketId', { socketId })
-      .execute();
-  }
 }
