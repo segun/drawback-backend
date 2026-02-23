@@ -154,7 +154,18 @@ export class DrawGateway
       await client.join(roomId);
       this.socketToRoom.set(client.id, roomId);
 
-      client.emit('chat.joined', { roomId, requestId: dto.requestId });
+      // Collect user IDs of peers already in the room so the joining client
+      // receives presence info immediately, without waiting for a separate
+      // draw.peer.joined event (which only fires for the peers, not the joiner).
+      const roomSockets = await this.server.in(roomId).allSockets();
+      const peers: string[] = [];
+      for (const socketId of roomSockets) {
+        if (socketId === client.id) continue;
+        const peerId = this.socketToUser.get(socketId);
+        if (peerId) peers.push(peerId);
+      }
+
+      client.emit('chat.joined', { roomId, requestId: dto.requestId, peers });
 
       // tell the other participant a peer has joined
       client.to(roomId).emit('draw.peer.joined', { userId });

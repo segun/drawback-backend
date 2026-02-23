@@ -501,15 +501,18 @@ Confirmation that **your** `chat.join` succeeded.
 ```jsonc
 {
   "roomId": "chat:uuid",
-  "requestId": "uuid"
+  "requestId": "uuid",
+  "peers": ["uuid"]   // user IDs already in the room; empty if you joined first
 }
 ```
+
+Check `peers` immediately after receiving this event to initialise peer-presence UI — if the array is non-empty, the other participant is already in the room and no separate `draw.peer.joined` will arrive for them.
 
 ---
 
 #### `draw.peer.joined`
 
-The other participant has joined the room. Use this to show a "peer connected" UI state.
+The other participant has joined **after** you. Use this to show a "peer connected" UI state. (If you joined second, use the `peers` array from `chat.joined` instead.)
 
 ```jsonc
 {

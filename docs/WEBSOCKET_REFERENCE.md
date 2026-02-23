@@ -152,15 +152,18 @@ socket.on('chat.joined', (data) => {
 ```jsonc
 {
   "roomId": "chat:b3d2a1...",
-  "requestId": "b3d2a1..."
+  "requestId": "b3d2a1...",
+  "peers": ["a1b2c3..."]   // user IDs of participants already in the room (may be empty)
 }
 ```
+
+Use the `peers` array to immediately show peer-presence indicators — do not wait for a `draw.peer.joined` event, which is only sent to participants who were _already_ in the room when you joined.
 
 ---
 
 ### `draw.peer.joined`
 
-**Who receives it:** The other participant(s) already in the room.  
+**Who receives it:** Participant(s) **already** in the room (not the joiner — the joiner gets peer info via `chat.joined`).  
 **When:** Someone else successfully joins via `chat.join`.
 
 ```js
@@ -304,7 +307,7 @@ socket.emit('chat.join', { requestId: 'b3d2a1...' });
 |---|---|---|---|
 | `requestId` | UUID string | ✓ | Must be an accepted request you are a party to |
 
-**Server responses:** `chat.joined` (to you), `draw.peer.joined` (to the other person).
+**Server responses:** `chat.joined` (to you, includes `peers` array of already-present user IDs), `draw.peer.joined` (to participants already in the room).
 
 If you were already in a different room, the server leaves it and notifies that room's peer automatically.
 
@@ -394,9 +397,12 @@ socket.emit('chat.join',                                       socket.emit('chat
   { requestId })                                                 { requestId })
                                  ← join room (Alice)
 ← chat.joined                    ← join room (Bob)
-                                                               ← chat.joined
+  { roomId, peers: [] }                                        ← chat.joined
+                                                                  { roomId, peers: [aliceId] }
+                                                               // peers[] tells Bob that Alice
+                                                               // is already present — no need
+                                                               // to wait for draw.peer.joined
 ← draw.peer.joined               (Bob joined, notify Alice)
-                                 (Alice joined, notify Bob)    ← draw.peer.joined
 
 // --- Now both are in the room ---
 
