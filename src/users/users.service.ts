@@ -5,12 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
+import { CacheService } from '../cache/cache.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
 import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
+
+const TTL_USER = 3600;
+const TTL_BLOCKED = 30;
+const TTL_PUBLIC = 30;
+const TTL_BLOCKED_LIST = 60;
 
 @Injectable()
 export class UsersService {
@@ -19,13 +26,50 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(UserBlock)
     private readonly blocksRepository: Repository<UserBlock>,
+    private readonly cache: CacheService,
   ) {}
 
+  // ── Cache key helpers ───────────────────────────────────────────────────
+
+  private userKey(id: string) {
+    return `user:${id}`;
+  }
+
+  /** Canonical: sort IDs so (A,B) and (B,A) hit the same key */
+  private blockedKey(userAId: string, userBId: string) {
+    const [a, b] = [userAId, userBId].sort();
+    return `blocked:${a}:${b}`;
+  }
+
+  private publicUsersKey(userId: string) {
+    return `public_users:${userId}`;
+  }
+
+  private blockedListKey(userId: string) {
+    return `blocked_list:${userId}`;
+  }
+
+  private async invalidateBlockCaches(
+    blockerId: string,
+    blockedId: string,
+  ): Promise<void> {
+    await this.cache.del(
+      this.blockedKey(blockerId, blockedId),
+      this.publicUsersKey(blockerId),
+      this.publicUsersKey(blockedId),
+      this.blockedListKey(blockerId),
+    );
+  }
+
   async findById(id: string): Promise<User> {
+    const cached = await this.cache.getInstance(this.userKey(id), User);
+    if (cached) return cached;
+
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    await this.cache.set(this.userKey(id), user, TTL_USER);
     return user;
   }
 
@@ -50,22 +94,36 @@ export class UsersService {
     }
 
     user.displayName = normalised;
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+    await this.cache.del(this.userKey(userId));
+    return saved;
   }
 
   async setMode(userId: string, mode: UserMode): Promise<User> {
     const user = await this.findById(userId);
     user.mode = mode;
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+    // Mode change must be visible immediately — bust user cache and every
+    // public-user list (since this user's visibility changed for everyone).
+    await Promise.all([
+      this.cache.del(this.userKey(userId)),
+      this.cache.delByPattern('public_users:*'),
+    ]);
+    return saved;
   }
 
   async deleteAccount(userId: string): Promise<void> {
     const user = await this.findById(userId);
     await this.usersRepository.remove(user);
+    await this.cache.del(this.userKey(userId));
   }
 
   async listPublic(currentUserId: string): Promise<User[]> {
-    return this.usersRepository
+    const key = this.publicUsersKey(currentUserId);
+    const cached = await this.cache.get<object[]>(key);
+    if (cached) return cached.map((u) => plainToInstance(User, u));
+
+    const users = await this.usersRepository
       .createQueryBuilder('user')
       .where('user.mode = :mode', { mode: UserMode.PUBLIC })
       .andWhere('user.id != :currentUserId', { currentUserId })
@@ -79,6 +137,9 @@ export class UsersService {
       )
       .orderBy('user.createdAt', 'DESC')
       .getMany();
+
+    await this.cache.set(key, users, TTL_PUBLIC);
+    return users;
   }
 
   async searchByDisplayName(
@@ -132,22 +193,34 @@ export class UsersService {
 
     const block = this.blocksRepository.create({ blockerId, blockedId });
     await this.blocksRepository.save(block);
+    await this.invalidateBlockCaches(blockerId, blockedId);
   }
 
   async unblockUser(blockerId: string, blockedId: string): Promise<void> {
     await this.blocksRepository.delete({ blockerId, blockedId });
+    await this.invalidateBlockCaches(blockerId, blockedId);
   }
 
   async listBlocked(blockerId: string): Promise<User[]> {
+    const key = this.blockedListKey(blockerId);
+    const cached = await this.cache.get<object[]>(key);
+    if (cached) return cached.map((u) => plainToInstance(User, u));
+
     const blocks = await this.blocksRepository.find({
       where: { blockerId },
       relations: ['blocked'],
       order: { createdAt: 'DESC' },
     });
-    return blocks.map((b) => b.blocked);
+    const users = blocks.map((b) => b.blocked);
+    await this.cache.set(key, users, TTL_BLOCKED_LIST);
+    return users;
   }
 
   async isBlocked(userAId: string, userBId: string): Promise<boolean> {
+    const key = this.blockedKey(userAId, userBId);
+    const cached = await this.cache.get<boolean>(key);
+    if (cached !== null) return cached;
+
     const count = await this.blocksRepository
       .createQueryBuilder('ub')
       .where(
@@ -155,6 +228,8 @@ export class UsersService {
         { userAId, userBId },
       )
       .getCount();
-    return count > 0;
+    const result = count > 0;
+    await this.cache.set(key, result, TTL_BLOCKED);
+    return result;
   }
 }

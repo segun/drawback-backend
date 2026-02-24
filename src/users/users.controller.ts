@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from './entities/user.entity';
@@ -51,6 +52,7 @@ export class UsersController {
   }
 
   @Get('search')
+  @Throttle({ search: { ttl: 60000, limit: 20 } })
   search(@CurrentUser() user: User, @Query('q') q: string) {
     return this.usersService.searchByDisplayName(q ?? '', user.id);
   }

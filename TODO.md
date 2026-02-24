@@ -1,3 +1,6 @@
 - [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.
 - [ ] display name should be unique, and should be changeable. Add a API to check if a display name is available.
-- [ ] Reconnect button, and when you get 401, auto log out the person web you get socket error, show reconnect button. When you click it, try to reconnect the socket, if it fails, log out the person.
+- [x] Reconnect button, and when you get 401, auto log out the person web you get socket error, show reconnect button. When you click it, try to reconnect the socket, if it fails, log out the person.
+- [ ] Add a "Appear in searches" option for private users. If they turn it off, they won't appear in search results else they will.
+- [ ] Add option to send request if you know the display name of the person.
+- [ ] If I'm already connected to someone, when they appear in searches, do not show the request button, instead show "Already connected" or something like that.
