@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { CacheService } from '../cache/cache.service';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
@@ -38,20 +39,33 @@ const repoMock = () => ({
   createQueryBuilder: jest.fn(),
 });
 
+const cacheMock = (): jest.Mocked<
+  Pick<CacheService, 'get' | 'getInstance' | 'set' | 'del' | 'delByPattern'>
+> => ({
+  get: jest.fn().mockResolvedValue(null),
+  getInstance: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+  delByPattern: jest.fn().mockResolvedValue(undefined),
+});
+
 describe('UsersService', () => {
   let service: UsersService;
   let usersRepo: ReturnType<typeof repoMock>;
   let blocksRepo: ReturnType<typeof repoMock>;
+  let cache: ReturnType<typeof cacheMock>;
 
   beforeEach(async () => {
     usersRepo = repoMock();
     blocksRepo = repoMock();
+    cache = cacheMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(UserBlock), useValue: blocksRepo },
+        { provide: CacheService, useValue: cache },
       ],
     }).compile();
 
