@@ -1,2 +1,3 @@
 - [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.
 - [ ] display name should be unique, and should be changeable. Add a API to check if a display name is available.
+- [ ] Reconnect button, and when you get 401, auto log out the person web you get socket error, show reconnect button. When you click it, try to reconnect the socket, if it fails, log out the person.

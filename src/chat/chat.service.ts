@@ -123,6 +123,18 @@ export class ChatService {
       throw new BadRequestException('Chat request is already resolved');
     }
 
+    if (dto.accept) {
+      const blocked = await this.usersService.isBlocked(
+        request.fromUserId,
+        request.toUserId,
+      );
+      if (blocked) {
+        throw new ForbiddenException(
+          'Cannot accept: a block exists between you and the requester',
+        );
+      }
+    }
+
     request.status = dto.accept
       ? ChatRequestStatus.ACCEPTED
       : ChatRequestStatus.REJECTED;
@@ -187,6 +199,16 @@ export class ChatService {
 
     if (request.status !== ChatRequestStatus.ACCEPTED) {
       throw new ForbiddenException('Chat request is not accepted');
+    }
+
+    const blocked = await this.usersService.isBlocked(
+      request.fromUserId,
+      request.toUserId,
+    );
+    if (blocked) {
+      throw new ForbiddenException(
+        'Cannot join: a block exists between you and the other participant',
+      );
     }
 
     return this.buildRoomId(request.id);
