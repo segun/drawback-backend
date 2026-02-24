@@ -3,7 +3,6 @@ import {
   Inject,
   Logger,
   OnModuleDestroy,
-  OnModuleInit,
   UnauthorizedException,
   UsePipes,
   ValidationPipe,
@@ -15,13 +14,14 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis, { RedisOptions } from 'ioredis';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
@@ -49,7 +49,7 @@ export class DrawGateway
   implements
     OnGatewayConnection,
     OnGatewayDisconnect,
-    OnModuleInit,
+    OnGatewayInit,
     OnModuleDestroy
 {
   private readonly logger = new Logger(DrawGateway.name);
@@ -91,7 +91,7 @@ export class DrawGateway
     private readonly config: ConfigService,
   ) {}
 
-  onModuleInit(): void {
+  afterInit(server: Namespace): void {
     const redisHost = this.config.get<string>('REDIS_HOST');
 
     if (!redisHost) {
@@ -116,7 +116,9 @@ export class DrawGateway
     this.redisClient = new Redis(redisOptions);
     const subClient = this.redisClient.duplicate();
 
-    this.server.adapter(createAdapter(this.redisClient, subClient));
+    // `server` here is the Socket.IO Namespace, not the root Server.
+    // The adapter must be set on the root Server instance.
+    server.server.adapter(createAdapter(this.redisClient, subClient));
     this.logger.log(
       `Socket.IO Redis adapter enabled (${redisHost}:${redisPort})`,
     );
