@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -11,6 +12,8 @@ import { User } from '../../users/entities/user.entity';
 import { ChatRequestStatus } from '../enums/chat-request-status.enum';
 
 @Entity('chat_requests')
+@Index('idx_chat_requests_fromUserId_status', ['fromUserId', 'status'])
+@Index('idx_chat_requests_toUserId_status', ['toUserId', 'status'])
 export class ChatRequest {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

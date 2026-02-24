@@ -10,6 +10,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
+import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
 
 @Injectable()
 export class UsersService {
@@ -87,10 +88,7 @@ export class UsersService {
     const normalised = query.toLowerCase().replace(/^@/, '');
     return this.usersRepository
       .createQueryBuilder('user')
-      .where('user.mode = :mode', { mode: UserMode.PUBLIC })
-      .andWhere('user.displayName LIKE :query', {
-        query: `@${normalised}%`,
-      })
+      .where('user.displayName LIKE :query', { query: `@${normalised}%` })
       .andWhere('user.id != :currentUserId', { currentUserId })
       .andWhere(
         `user.id NOT IN (
@@ -99,6 +97,20 @@ export class UsersService {
           SELECT ub.blockerId FROM user_blocks ub WHERE ub.blockedId = :currentUserId
         )`,
         { currentUserId },
+      )
+      .andWhere(
+        `(
+          user.mode = :publicMode
+          OR EXISTS (
+            SELECT 1 FROM chat_requests cr
+            WHERE cr.status = :accepted
+              AND (
+                (cr.fromUserId = :currentUserId AND cr.toUserId = user.id)
+                OR (cr.fromUserId = user.id AND cr.toUserId = :currentUserId)
+              )
+          )
+        )`,
+        { publicMode: UserMode.PUBLIC, accepted: ChatRequestStatus.ACCEPTED },
       )
       .orderBy('user.displayName', 'ASC')
       .getMany();
@@ -145,5 +157,4 @@ export class UsersService {
       .getCount();
     return count > 0;
   }
-
 }

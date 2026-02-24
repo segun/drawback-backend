@@ -1,6 +1,7 @@
 import {
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -11,6 +12,7 @@ import { User } from './user.entity';
 
 @Entity('user_blocks')
 @Unique(['blockerId', 'blockedId'])
+@Index('idx_user_blocks_blockedId', ['blockedId'])
 export class UserBlock {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
