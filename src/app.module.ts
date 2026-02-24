@@ -18,6 +18,7 @@ import { UsersModule } from './users/users.module';
       { name: 'short', ttl: 1000, limit: 3 },
       { name: 'auth', ttl: 60000, limit: 10 },
       { name: 'search', ttl: 60000, limit: 20 },
+      { name: 'dnCheck', ttl: 60000, limit: 10 },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

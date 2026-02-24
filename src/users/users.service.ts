@@ -79,6 +79,20 @@ export class UsersService {
     });
   }
 
+  async isDisplayNameAvailable(
+    displayName: string,
+    currentUserId?: string,
+  ): Promise<{ available: boolean }> {
+    const normalised = displayName.toLowerCase();
+    const existing = await this.usersRepository.findOne({
+      where: { displayName: normalised },
+    });
+    // Available if nobody has it, or the only holder is the requesting user themselves
+    const available =
+      !existing || (!!currentUserId && existing.id === currentUserId);
+    return { available };
+  }
+
   async updateDisplayName(
     userId: string,
     dto: UpdateProfileDto,

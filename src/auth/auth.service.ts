@@ -73,11 +73,19 @@ export class AuthService {
     });
 
     if (!user) {
-      return { success: false, email: null, reason: 'Invalid or expired activation token' };
+      return {
+        success: false,
+        email: null,
+        reason: 'Invalid or expired activation token',
+      };
     }
 
     if (user.isActivated) {
-      return { success: false, email: user.email, reason: 'Account is already activated' };
+      return {
+        success: false,
+        email: user.email,
+        reason: 'Account is already activated',
+      };
     }
 
     user.isActivated = true;
@@ -87,8 +95,13 @@ export class AuthService {
     return { success: true, email: user.email };
   }
 
-  async resendConfirmationEmail(dto: ResendConfirmationDto): Promise<{ message: string }> {
-    const generic = { message: 'If that email exists and is unactivated, a new confirmation link has been sent.' };
+  async resendConfirmationEmail(
+    dto: ResendConfirmationDto,
+  ): Promise<{ message: string }> {
+    const generic = {
+      message:
+        'If that email exists and is unactivated, a new confirmation link has been sent.',
+    };
 
     const user = await this.usersRepository.findOne({
       where: { email: dto.email.toLowerCase() },
@@ -102,11 +115,21 @@ export class AuthService {
     await this.usersRepository.save(user);
     await this.mailService.sendActivationEmail(
       user.email,
-      user.activationToken!,
+      user.activationToken,
       user.displayName,
     );
 
     return generic;
+  }
+
+  async isDisplayNameAvailable(
+    displayName: string,
+  ): Promise<{ available: boolean }> {
+    const normalised = displayName.toLowerCase();
+    const existing = await this.usersRepository.findOne({
+      where: { displayName: normalised },
+    });
+    return { available: !existing };
   }
 
   async login(dto: LoginDto): Promise<{ accessToken: string }> {

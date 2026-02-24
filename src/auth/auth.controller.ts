@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Redirect } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Redirect,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -54,5 +63,14 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Get('display-name/check')
+  @Throttle({ dnCheck: { ttl: 60000, limit: 10 } })
+  checkDisplayName(@Query('name') name: string) {
+    if (!name) {
+      throw new BadRequestException('name query parameter is required');
+    }
+    return this.authService.isDisplayNameAvailable(name);
   }
 }
