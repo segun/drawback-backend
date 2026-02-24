@@ -30,8 +30,6 @@ import { DrawClearDto } from './dto/draw-clear.dto';
 import { DrawStrokeDto } from './dto/draw-stroke.dto';
 import { JoinChatDto } from './dto/join-chat.dto';
 
-/** Max draw.stroke events allowed per socket per second. */
-const STROKE_RATE_LIMIT = 60;
 /** Max draw.clear events allowed per socket per 5 seconds. */
 const CLEAR_RATE_LIMIT = 5;
 const CLEAR_RATE_WINDOW_MS = 5_000;
@@ -65,15 +63,6 @@ export class DrawGateway
 
   /** tracks which room (if any) each socket has joined */
   private readonly socketToRoom = new Map<string, string>();
-
-  /**
-   * Per-socket stroke rate limiting: socketId → { count, windowStart }.
-   * Resets every second.
-   */
-  private readonly strokeRateMap = new Map<
-    string,
-    { count: number; windowStart: number }
-  >();
 
   /**
    * Per-socket clear rate limiting: socketId → { count, windowStart }.
@@ -173,7 +162,6 @@ export class DrawGateway
     }
 
     this.socketToUser.delete(client.id);
-    this.strokeRateMap.delete(client.id);
     this.clearRateMap.delete(client.id);
 
     // Remove from Redis only if this socket is still the current one for the
@@ -259,11 +247,6 @@ export class DrawGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: DrawStrokeDto,
   ): void {
-    // Rate limit: max STROKE_RATE_LIMIT strokes per second per socket.
-    if (this.isStrokeRateLimited(client.id)) {
-      return; // silently drop — don't disconnect, just shed the load
-    }
-
     // Use the cached room — validated once during chat.join.
     // No DB query needed on the hot drawing path.
     const room = this.socketToRoom.get(client.id);
@@ -338,26 +321,6 @@ export class DrawGateway
   // ---------------------------------------------------------------------------
   // Rate limiting helpers
   // ---------------------------------------------------------------------------
-
-  private isStrokeRateLimited(socketId: string): boolean {
-    const now = Date.now();
-    const entry = this.strokeRateMap.get(socketId) ?? {
-      count: 0,
-      windowStart: now,
-    };
-
-    if (now - entry.windowStart >= 1_000) {
-      // New 1-second window
-      entry.count = 1;
-      entry.windowStart = now;
-      this.strokeRateMap.set(socketId, entry);
-      return false;
-    }
-
-    entry.count++;
-    this.strokeRateMap.set(socketId, entry);
-    return entry.count > STROKE_RATE_LIMIT;
-  }
 
   private isClearRateLimited(socketId: string): boolean {
     const now = Date.now();
