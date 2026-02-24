@@ -3,4 +3,4 @@
 - [x] Reconnect button, and when you get 401, auto log out the person web you get socket error, show reconnect button. When you click it, try to reconnect the socket, if it fails, log out the person.
 - [ ] Add a "Appear in searches" option for private users. If they turn it off, they won't appear in search results else they will.
 - [ ] Add option to send request if you know the display name of the person.
-- [ ] If I'm already connected to someone, when they appear in searches, do not show the request button, instead show "Already connected" or something like that.
+- [x] If I'm already connected to someone, when they appear in searches, do not show the request button, instead show "Already connected" or something like that.

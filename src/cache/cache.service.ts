@@ -31,8 +31,12 @@ export class CacheService implements OnModuleDestroy {
 
   async get<T>(key: string): Promise<T | null> {
     if (this.redis) {
-      const raw = await this.redis.get(key);
-      return raw ? (JSON.parse(raw) as T) : null;
+      try {
+        const raw = await this.redis.get(key);
+        return raw ? (JSON.parse(raw) as T) : null;
+      } catch {
+        // Redis unavailable — fall through to in-memory
+      }
     }
 
     const entry = this.mem.get(key);
@@ -46,21 +50,32 @@ export class CacheService implements OnModuleDestroy {
 
   /**
    * Like get(), but reconstructs the value as a class instance so that
-   * class-transformer decorators (@Exclude etc.) continue to apply.
+   * class-transformer decorators (@Exclude etc.) apply on outbound HTTP
+   * serialization. Uses ignoreDecorators:true for the plainToInstance call
+   * so that @Exclude() fields (e.g. isActivated) are correctly populated
+   * internally — they are still excluded from HTTP responses by
+   * ClassSerializerInterceptor when it calls instanceToPlain.
    */
   async getInstance<T>(
     key: string,
     cls: new (...args: unknown[]) => T,
   ): Promise<T | null> {
     const plain = await this.get<object>(key);
-    return plain ? plainToInstance(cls, plain) : null;
+    return plain
+      ? plainToInstance(cls, plain, { ignoreDecorators: true })
+      : null;
   }
 
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     const serialised = JSON.stringify(value);
     if (this.redis) {
-      await this.redis.set(key, serialised, 'EX', ttlSeconds);
-      return;
+      this.logger.debug(`Cache set: ${key} (TTL ${ttlSeconds}s)`);
+      try {
+        await this.redis.set(key, serialised, 'EX', ttlSeconds);
+        return;
+      } catch {
+        // Redis unavailable — fall through to in-memory
+      }
     }
     this.mem.set(key, {
       value: serialised,
@@ -71,8 +86,13 @@ export class CacheService implements OnModuleDestroy {
   async del(...keys: string[]): Promise<void> {
     if (!keys.length) return;
     if (this.redis) {
-      await this.redis.del(...keys);
-      return;
+      this.logger.debug(`Cache del: ${keys.join(', ')}`);
+      try {
+        await this.redis.del(...keys);
+        return;
+      } catch {
+        // Redis unavailable — fall through to in-memory
+      }
     }
     keys.forEach((k) => this.mem.delete(k));
   }
@@ -83,23 +103,30 @@ export class CacheService implements OnModuleDestroy {
    */
   async delByPattern(pattern: string): Promise<void> {
     if (this.redis) {
-      let cursor = '0';
-      do {
-        const [next, keys] = await this.redis.scan(
-          cursor,
-          'MATCH',
-          pattern,
-          'COUNT',
-          100,
-        );
-        cursor = next;
-        if (keys.length) await this.redis.del(...keys);
-      } while (cursor !== '0');
-      return;
+      this.logger.debug(`Cache delByPattern: ${pattern}`);
+      try {
+        let cursor = '0';
+        do {
+          const [next, keys] = await this.redis.scan(
+            cursor,
+            'MATCH',
+            pattern,
+            'COUNT',
+            100,
+          );
+          cursor = next;
+          if (keys.length) await this.redis.del(...keys);
+        } while (cursor !== '0');
+        return;
+      } catch {
+        // Redis unavailable — fall through to in-memory
+      }
     }
 
     const regex = new RegExp(
-      '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$',
+      '^' +
+        pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') +
+        '$',
     );
     for (const key of this.mem.keys()) {
       if (regex.test(key)) this.mem.delete(key);

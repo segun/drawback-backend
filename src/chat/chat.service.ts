@@ -173,9 +173,7 @@ export class ChatService {
     }
 
     if (request.status !== ChatRequestStatus.PENDING) {
-      throw new BadRequestException(
-        'Only pending requests can be cancelled',
-      );
+      throw new BadRequestException('Only pending requests can be cancelled');
     }
 
     await this.chatRequestRepository.remove(request);
@@ -216,6 +214,27 @@ export class ChatService {
 
   buildRoomId(requestId: string): string {
     return `chat:${requestId}`;
+  }
+
+  /**
+   * Returns the userId of the other participant in an accepted chat request.
+   * Returns null if the request doesn't exist or userId is not a participant.
+   */
+  async getPeerUserId(
+    requestId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const request = await this.chatRequestRepository.findOne({
+      where: { id: requestId },
+    });
+
+    if (!request) return null;
+    if (request.fromUserId !== userId && request.toUserId !== userId)
+      return null;
+
+    return request.fromUserId === userId
+      ? request.toUserId
+      : request.fromUserId;
   }
 
   async saveChat(requestId: string, userId: string): Promise<SavedChat> {

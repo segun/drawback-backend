@@ -225,6 +225,22 @@ export class DrawGateway
 
       // tell the other participant a peer has joined
       client.to(roomId).emit('draw.peer.joined', { userId });
+
+      // If the peer is not yet in the room, send them a waiting notification
+      // so the frontend can alert them regardless of what room they're in.
+      if (peers.length === 0) {
+        const peerId = await this.chatService.getPeerUserId(
+          dto.requestId,
+          userId,
+        );
+        if (peerId) {
+          await this.emitToUser(peerId, 'draw.peer.waiting', {
+            roomId,
+            requestId: dto.requestId,
+            waitingUserId: userId,
+          });
+        }
+      }
     } catch (err) {
       this.emitError(client, err);
     }
