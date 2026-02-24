@@ -176,6 +176,7 @@ export class UsersService {
       .andWhere(
         `(
           user.mode = :publicMode
+          OR user.appearInSearches = TRUE
           OR EXISTS (
             SELECT 1 FROM chat_requests cr
             WHERE cr.status = :accepted
@@ -189,6 +190,17 @@ export class UsersService {
       )
       .orderBy('user.displayName', 'ASC')
       .getMany();
+  }
+
+  async setAppearInSearches(
+    userId: string,
+    appearInSearches: boolean,
+  ): Promise<User> {
+    const user = await this.findById(userId);
+    user.appearInSearches = appearInSearches;
+    const saved = await this.usersRepository.save(user);
+    await this.cache.del(this.userKey(userId));
+    return saved;
   }
 
   async blockUser(blockerId: string, blockedId: string): Promise<void> {

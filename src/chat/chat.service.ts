@@ -51,7 +51,7 @@ export class ChatService {
       );
     }
 
-    if (toUser.mode !== UserMode.PUBLIC) {
+    if (toUser.mode !== UserMode.PUBLIC && !toUser.appearInSearches) {
       throw new ForbiddenException('This user is not accepting chat requests');
     }
 

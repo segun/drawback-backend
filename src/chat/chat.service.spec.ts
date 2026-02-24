@@ -20,6 +20,7 @@ const makeUser = (overrides: Partial<User> = {}): User =>
     email: 'alice@example.com',
     displayName: '@alice',
     mode: UserMode.PUBLIC,
+    appearInSearches: true,
     ...overrides,
   }) as User;
 
@@ -149,15 +150,31 @@ describe('ChatService', () => {
       );
     });
 
-    it('throws ForbiddenException when target user is PRIVATE', async () => {
-      usersService.findByDisplayName.mockResolvedValue({
-        ...toUser,
-        mode: UserMode.PRIVATE,
-      } as User);
+    it('throws ForbiddenException when target user is PRIVATE and appearInSearches=false', async () => {
+      usersService.findByDisplayName.mockResolvedValue(
+        makeUser({
+          id: 'user-2',
+          mode: UserMode.PRIVATE,
+          appearInSearches: false,
+        }),
+      );
 
       await expect(service.createRequest('user-1', dto)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    it('allows sending a request to a PRIVATE user who has appearInSearches=true', async () => {
+      usersService.findByDisplayName.mockResolvedValue(
+        makeUser({
+          id: 'user-2',
+          mode: UserMode.PRIVATE,
+          appearInSearches: true,
+        }),
+      );
+
+      await expect(service.createRequest('user-1', dto)).resolves.toBeDefined();
+      expect(chatRequestRepo.save).toHaveBeenCalledTimes(1);
     });
 
     it('throws BadRequestException when duplicate PENDING request exists', async () => {

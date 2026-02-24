@@ -18,6 +18,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from './entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SetUserModeDto } from './dto/set-user-mode.dto';
+import { SetAppearInSearchesDto } from './dto/set-appear-in-searches.dto';
 import { UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
@@ -38,6 +39,14 @@ export class UsersController {
   @Patch('me/mode')
   setMode(@CurrentUser() user: User, @Body() dto: SetUserModeDto) {
     return this.usersService.setMode(user.id, dto.mode);
+  }
+
+  @Patch('me/appear-in-searches')
+  setAppearInSearches(
+    @CurrentUser() user: User,
+    @Body() dto: SetAppearInSearchesDto,
+  ) {
+    return this.usersService.setAppearInSearches(user.id, dto.appearInSearches);
   }
 
   @Delete('me')

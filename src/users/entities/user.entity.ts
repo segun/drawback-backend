@@ -34,6 +34,9 @@ export class User {
   @Column({ type: 'enum', enum: UserMode, default: UserMode.PRIVATE })
   mode!: UserMode;
 
+  @Column({ default: true })
+  appearInSearches!: boolean;
+
   @Exclude()
   @Column({ type: 'varchar', nullable: true, length: 128 })
   socketId!: string | null;
