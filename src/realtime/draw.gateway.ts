@@ -273,7 +273,8 @@ export class DrawGateway
       return;
     }
 
-    client.to(room).emit('draw.stroke', dto);
+    const userId = this.socketToUser.get(client.id);
+    client.to(room).emit('draw.stroke', { ...dto, userId });
   }
 
   @SubscribeMessage('draw.clear')
@@ -298,7 +299,8 @@ export class DrawGateway
       return;
     }
 
-    client.to(room).emit('draw.clear', dto);
+    const userId = this.socketToUser.get(client.id);
+    client.to(room).emit('draw.clear', { ...dto, userId });
   }
 
   /**
