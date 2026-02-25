@@ -25,10 +25,7 @@ export class ChatController {
   // ── Requests ────────────────────────────────────────────────────────────
 
   @Post('requests')
-  createRequest(
-    @CurrentUser() user: User,
-    @Body() dto: CreateChatRequestDto,
-  ) {
+  createRequest(@CurrentUser() user: User, @Body() dto: CreateChatRequestDto) {
     return this.chatService.createRequest(user.id, dto);
   }
 
