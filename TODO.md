@@ -1,8 +1,9 @@
 - [ ] Still having race condition where 2 people are waiting for each other.
 - [ ] Suddenly logs out in the middle of a drawing session. (Token expired or something like that)
 - [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.
-- [ ] Reset password feature.
+- [x] Reset password feature.
 - [ ] Add an About page with a link to the GitHub repo and a link to the privacy policy.
+- [ ] When showing profile, disconnect socket because we don't want to receive drawing updates when we're not drawing.
 - [x] displayName should be unique, and should be changeable. Add a API to check if a display name is available.
 - [x] Reconnect button, and when you get 401, auto log out the person web you get socket error, show reconnect button. When you click it, try to reconnect the socket, if it fails, log out the person.
 - [x] Add a "Appear in searches" option for private users. If they turn it off, they won't appear in search results else they will.

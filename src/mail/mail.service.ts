@@ -56,6 +56,49 @@ export class MailService {
     return html;
   }
 
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    displayName: string,
+    expiresInHours: number,
+  ): Promise<void> {
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+    const { appName, supportEmail, logoUrl } = this;
+
+    const templatePath = path.join(
+      __dirname,
+      '..',
+      'auth',
+      'public',
+      'password-reset.html',
+    );
+
+    const html = this.renderTemplate(templatePath, {
+      appName,
+      logoUrl,
+      displayName,
+      email,
+      resetUrl,
+      expiresInHours: String(expiresInHours),
+      supportEmail,
+      year: new Date().getFullYear().toString(),
+    });
+
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email,
+        subject: `${appName} — password reset request`,
+        text: `Hi ${displayName}, click the link to reset your password: ${resetUrl} (expires in ${expiresInHours} hour${expiresInHours === 1 ? '' : 's'})`,
+        html,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to send password reset email to ${email}`, err);
+      throw err;
+    }
+  }
+
   async sendActivationEmail(
     email: string,
     token: string,

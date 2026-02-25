@@ -11,9 +11,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -55,7 +57,6 @@ export class AuthController {
   resendConfirmation(
     @Body() dto: ResendConfirmationDto,
   ): Promise<{ message: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
     return this.authService.resendConfirmationEmail(dto);
   }
 
@@ -63,6 +64,34 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
+  @Post('reset-password')
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ status: string; message: string; email?: string }> {
+    const result = await this.authService.resetPassword(dto);
+
+    if (result.success) {
+      return {
+        status: 'success',
+        message: 'Your password has been reset successfully.',
+        email: result.email as string,
+      };
+    }
+
+    return {
+      status: 'error',
+      message: result.reason ?? 'Password reset failed',
+      ...(result.email ? { email: result.email } : {}),
+    };
   }
 
   @Get('display-name/check')

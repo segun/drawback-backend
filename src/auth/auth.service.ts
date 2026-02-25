@@ -11,9 +11,11 @@ import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -130,6 +132,70 @@ export class AuthService {
       where: { displayName: normalised },
     });
     return { available: !existing };
+  }
+
+  /** How long (hours) a password-reset token remains valid. */
+  static readonly RESET_TOKEN_TTL_HOURS = 1;
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const generic = {
+      message: 'If that email exists, a password reset link has been sent.',
+    };
+
+    const user = await this.usersRepository.findOne({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    // Respond generically to prevent email enumeration
+    if (!user || !user.isActivated) {
+      return generic;
+    }
+
+    const token = randomUUID();
+    const expiryMs = AuthService.RESET_TOKEN_TTL_HOURS * 60 * 60 * 1000;
+    user.resetToken = token;
+    user.resetTokenExpiry = new Date(Date.now() + expiryMs);
+    await this.usersRepository.save(user);
+
+    await this.mailService.sendPasswordResetEmail(
+      user.email,
+      token,
+      user.displayName,
+      AuthService.RESET_TOKEN_TTL_HOURS,
+    );
+
+    return generic;
+  }
+
+  async resetPassword(
+    dto: ResetPasswordDto,
+  ): Promise<{ success: boolean; email: string | null; reason?: string }> {
+    const user = await this.usersRepository.findOne({
+      where: { resetToken: dto.token },
+    });
+
+    if (!user || !user.resetToken || !user.resetTokenExpiry) {
+      return {
+        success: false,
+        email: null,
+        reason: 'Invalid or expired reset token',
+      };
+    }
+
+    if (user.resetTokenExpiry < new Date()) {
+      return {
+        success: false,
+        email: user.email,
+        reason: 'Reset token has expired',
+      };
+    }
+
+    user.passwordHash = await bcrypt.hash(dto.password, 12);
+    user.resetToken = null;
+    user.resetTokenExpiry = null;
+    await this.usersRepository.save(user);
+
+    return { success: true, email: user.email };
   }
 
   async login(dto: LoginDto): Promise<{ accessToken: string }> {
