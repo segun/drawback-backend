@@ -27,6 +27,7 @@ import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DrawClearDto } from './dto/draw-clear.dto';
+import { DrawEmoteDto } from './dto/draw-emote.dto';
 import { DrawStrokeDto } from './dto/draw-stroke.dto';
 import { JoinChatDto } from './dto/join-chat.dto';
 
@@ -275,6 +276,21 @@ export class DrawGateway
 
     const userId = this.socketToUser.get(client.id);
     client.to(room).emit('draw.stroke', { ...dto, userId });
+  }
+
+  @SubscribeMessage('draw.emote')
+  sendEmote(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: DrawEmoteDto,
+  ): void {
+    const room = this.socketToRoom.get(client.id);
+    if (!room) {
+      this.emitError(client, new ForbiddenException('Not in a room'));
+      return;
+    }
+
+    const userId = this.socketToUser.get(client.id);
+    client.to(room).emit('draw.emote', { ...dto, userId });
   }
 
   @SubscribeMessage('draw.clear')
