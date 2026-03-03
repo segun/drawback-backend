@@ -57,6 +57,15 @@ export class ChatController {
     await this.chatService.cancelRequest(requestId, user.id);
   }
 
+  @Delete('requests/:requestId/remove')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeAcceptedChat(
+    @CurrentUser() user: User,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+  ) {
+    await this.chatService.removeAcceptedChat(requestId, user.id);
+  }
+
   // ── Saved chats ─────────────────────────────────────────────────────────
 
   @Post('requests/:requestId/save')

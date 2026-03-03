@@ -290,4 +290,24 @@ export class ChatService {
 
     await this.savedChatsRepository.remove(saved);
   }
+
+  async removeAcceptedChat(requestId: string, userId: string): Promise<void> {
+    const request = await this.chatRequestRepository.findOne({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Chat request not found');
+    }
+
+    if (request.fromUserId !== userId && request.toUserId !== userId) {
+      throw new ForbiddenException('You are not part of this chat');
+    }
+
+    if (request.status !== ChatRequestStatus.ACCEPTED) {
+      throw new BadRequestException('Only accepted chats can be removed');
+    }
+
+    await this.chatRequestRepository.remove(request);
+  }
 }
