@@ -5,6 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
+import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 
 // Mock bcrypt at module level so its exports are configurable
@@ -32,6 +33,7 @@ type MockedUsersRepo = {
 };
 type MockedJwtService = { sign: jest.Mock };
 type MockedMailService = { sendActivationEmail: jest.Mock };
+type MockedUsersService = { isDisplayNameAvailable: jest.Mock };
 
 const repositoryMockFactory = (): MockedUsersRepo => ({
   findOne: jest.fn(),
@@ -44,6 +46,7 @@ describe('AuthService', () => {
   let usersRepo: MockedUsersRepo;
   let jwtService: MockedJwtService;
   let mailService: MockedMailService;
+  let usersService: MockedUsersService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -63,6 +66,12 @@ describe('AuthService', () => {
             sendActivationEmail: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: UsersService,
+          useValue: {
+            isDisplayNameAvailable: jest.fn().mockResolvedValue(true),
+          },
+        },
       ],
     }).compile();
 
@@ -70,6 +79,7 @@ describe('AuthService', () => {
     usersRepo = module.get<MockedUsersRepo>(getRepositoryToken(User));
     jwtService = module.get<MockedJwtService>(JwtService);
     mailService = module.get<MockedMailService>(MailService);
+    usersService = module.get<MockedUsersService>(UsersService);
   });
 
   afterEach(() => jest.clearAllMocks());

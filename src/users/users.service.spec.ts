@@ -6,6 +6,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CacheService } from '../cache/cache.service';
+import { ChatService } from '../chat/chat.service';
 import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
@@ -27,6 +28,7 @@ const qbMock = () => ({
   andWhere: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
   getMany: jest.fn().mockResolvedValue([]),
+  getOne: jest.fn().mockResolvedValue(null),
   getCount: jest.fn().mockResolvedValue(0),
 });
 
@@ -51,22 +53,32 @@ const cacheMock = (): jest.Mocked<
   delByPattern: jest.fn().mockResolvedValue(undefined),
 });
 
+const chatServiceMock = (): jest.Mocked<
+  Pick<ChatService, 'closeRoomsBetweenUsers' | 'closeAllRoomsForUser'>
+> => ({
+  closeRoomsBetweenUsers: jest.fn().mockResolvedValue(undefined),
+  closeAllRoomsForUser: jest.fn().mockResolvedValue(undefined),
+});
+
 describe('UsersService', () => {
   let service: UsersService;
   let usersRepo: ReturnType<typeof repoMock>;
   let blocksRepo: ReturnType<typeof repoMock>;
   let cache: ReturnType<typeof cacheMock>;
+  let chatService: ReturnType<typeof chatServiceMock>;
 
   beforeEach(async () => {
     usersRepo = repoMock();
     blocksRepo = repoMock();
     cache = cacheMock();
+    chatService = chatServiceMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(UserBlock), useValue: blocksRepo },
+        { provide: ChatService, useValue: chatService },
         { provide: CacheService, useValue: cache },
       ],
     }).compile();
@@ -165,6 +177,7 @@ describe('UsersService', () => {
 
       await service.deleteAccount('user-1');
 
+      expect(chatService.closeAllRoomsForUser).toHaveBeenCalledWith('user-1');
       expect(usersRepo.remove).toHaveBeenCalledWith(user);
     });
   });
@@ -191,6 +204,10 @@ describe('UsersService', () => {
       await service.blockUser('user-1', 'user-2');
 
       expect(blocksRepo.save).toHaveBeenCalledTimes(1);
+      expect(chatService.closeRoomsBetweenUsers).toHaveBeenCalledWith(
+        'user-1',
+        'user-2',
+      );
     });
 
     it('is idempotent when block already exists', async () => {
@@ -204,6 +221,7 @@ describe('UsersService', () => {
       await service.blockUser('user-1', 'user-2');
 
       expect(blocksRepo.save).not.toHaveBeenCalled();
+      expect(chatService.closeRoomsBetweenUsers).not.toHaveBeenCalled();
     });
   });
 

@@ -34,7 +34,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const cached = await this.cache.getInstance(key, User);
     if (cached) {
-      if (!cached.isActivated) throw new UnauthorizedException();
+      if (!cached.isActivated)
+        throw new UnauthorizedException('Invalid or expired token');
       return cached;
     }
 
@@ -43,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
 
     if (!user || !user.isActivated) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException('Invalid or expired token');
     }
 
     await this.cache.set(key, user, TTL_USER);

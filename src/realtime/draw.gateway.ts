@@ -139,6 +139,35 @@ export class DrawGateway
     this.logger.log(
       `Socket.IO Redis adapter enabled (${redisHost}:${redisPort})`,
     );
+
+    // Periodic cleanup to prevent memory leaks from abnormal disconnections
+    setInterval(() => {
+      const now = Date.now();
+      let clearRateCleanedCount = 0;
+      let strokeRateCleanedCount = 0;
+
+      // Clean up stale clearRateMap entries (older than 2x window)
+      for (const [socketId, entry] of this.clearRateMap) {
+        if (now - entry.windowStart > CLEAR_RATE_WINDOW_MS * 2) {
+          this.clearRateMap.delete(socketId);
+          clearRateCleanedCount++;
+        }
+      }
+
+      // Clean up stale strokeRateMap entries (older than 2x window)
+      for (const [socketId, entry] of this.strokeRateMap) {
+        if (now - entry.windowStart > STROKE_RATE_WINDOW_MS * 2) {
+          this.strokeRateMap.delete(socketId);
+          strokeRateCleanedCount++;
+        }
+      }
+
+      if (clearRateCleanedCount > 0 || strokeRateCleanedCount > 0) {
+        this.logger.debug(
+          `Cleaned up stale rate limit entries: ${clearRateCleanedCount} clear, ${strokeRateCleanedCount} stroke`,
+        );
+      }
+    }, 60_000); // Every minute
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -206,6 +235,52 @@ export class DrawGateway
 
   notifyChatResponse(userId: string, payload: Record<string, unknown>): void {
     void this.emitToUser(userId, 'chat.response', payload);
+  }
+
+  /**
+   * Force all participants in a room to leave and notify them that the room has
+   * been closed. Used when a user blocks another or deletes a chat while in an
+   * active drawing session.
+   */
+  async forceCloseRoom(roomId: string): Promise<void> {
+    const roomSockets = await this.server.in(roomId).allSockets();
+
+    // Collect all user IDs in the room
+    const userIds: string[] = [];
+    for (const socketId of roomSockets) {
+      let userId = this.socketToUser.get(socketId);
+      if (!userId) {
+        const redisResult = await this.redisClient.get(
+          `${SOCKET_USER_KEY_PREFIX}:${socketId}`,
+        );
+        userId = redisResult ?? undefined;
+      }
+      if (userId) {
+        userIds.push(userId);
+      }
+    }
+
+    // Notify all sockets in the room that it's being closed
+    this.server.to(roomId).emit('draw.room.closed', {
+      reason: 'The chat has been closed by the other participant',
+    });
+
+    // Notify each socket about all peers leaving
+    for (const userId of userIds) {
+      this.server.to(roomId).emit('draw.peer.left', { userId });
+    }
+
+    // Make all sockets leave the room (works across workers via Redis adapter)
+    this.server.in(roomId).socketsLeave(roomId);
+
+    // Clean up local state for sockets on this worker
+    for (const socketId of roomSockets) {
+      if (this.socketToRoom.get(socketId) === roomId) {
+        this.socketToRoom.delete(socketId);
+      }
+    }
+
+    this.logger.debug(`Force closed room: ${roomId}`);
   }
 
   @SubscribeMessage('chat.join')

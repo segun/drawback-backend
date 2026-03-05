@@ -11,8 +11,8 @@ import { SavedChat } from './entities/saved-chat.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([ChatRequest, SavedChat]),
-    UsersModule,
-    AuthModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => UsersModule),
     forwardRef(() => RealtimeModule),
   ],
   controllers: [ChatController],

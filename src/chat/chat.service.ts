@@ -24,6 +24,7 @@ export class ChatService {
     private readonly chatRequestRepository: Repository<ChatRequest>,
     @InjectRepository(SavedChat)
     private readonly savedChatsRepository: Repository<SavedChat>,
+    @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     @Inject(forwardRef(() => DrawGateway))
     private readonly drawGateway: DrawGateway,
@@ -129,9 +130,9 @@ export class ChatService {
         request.toUserId,
       );
       if (blocked) {
-        throw new ForbiddenException(
-          'Cannot accept: a block exists between you and the requester',
-        );
+        // remove the chat request
+        await this.chatRequestRepository.remove(request);
+        throw new ForbiddenException('Can not find user.');
       }
     }
 
@@ -204,9 +205,9 @@ export class ChatService {
       request.toUserId,
     );
     if (blocked) {
-      throw new ForbiddenException(
-        'Cannot join: a block exists between you and the other participant',
-      );
+      // remove the chat request
+      await this.chatRequestRepository.remove(request);
+      throw new ForbiddenException('Can not find user.');
     }
 
     return this.buildRoomId(request.id);
@@ -308,6 +309,51 @@ export class ChatService {
       throw new BadRequestException('Only accepted chats can be removed');
     }
 
+    // Force close the drawing room before deleting the chat request
+    const roomId = this.buildRoomId(request.id);
+    await this.drawGateway.forceCloseRoom(roomId);
+
     await this.chatRequestRepository.remove(request);
+  }
+
+  /**
+   * Close any active drawing rooms between two users (e.g., when one blocks the other).
+   * Used by UsersService when blocking or deleting accounts.
+   */
+  async closeRoomsBetweenUsers(
+    userId1: string,
+    userId2: string,
+  ): Promise<void> {
+    const activeChats = await this.chatRequestRepository
+      .createQueryBuilder('cr')
+      .where('cr.status = :status', { status: ChatRequestStatus.ACCEPTED })
+      .andWhere(
+        '((cr.fromUserId = :userId1 AND cr.toUserId = :userId2) OR (cr.fromUserId = :userId2 AND cr.toUserId = :userId1))',
+        { userId1, userId2 },
+      )
+      .getMany();
+
+    for (const chat of activeChats) {
+      const roomId = this.buildRoomId(chat.id);
+      await this.drawGateway.forceCloseRoom(roomId);
+    }
+  }
+
+  /**
+   * Close all active drawing rooms for a user (e.g., when account is deleted).
+   */
+  async closeAllRoomsForUser(userId: string): Promise<void> {
+    const activeChats = await this.chatRequestRepository
+      .createQueryBuilder('cr')
+      .where('cr.status = :status', { status: ChatRequestStatus.ACCEPTED })
+      .andWhere('(cr.fromUserId = :userId OR cr.toUserId = :userId)', {
+        userId,
+      })
+      .getMany();
+
+    for (const chat of activeChats) {
+      const roomId = this.buildRoomId(chat.id);
+      await this.drawGateway.forceCloseRoom(roomId);
+    }
   }
 }

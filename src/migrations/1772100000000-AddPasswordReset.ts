@@ -16,8 +16,6 @@ export class AddPasswordReset1772100000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE \`users\` DROP COLUMN \`resetTokenExpiry\``,
     );
-    await queryRunner.query(
-      `ALTER TABLE \`users\` DROP COLUMN \`resetToken\``,
-    );
+    await queryRunner.query(`ALTER TABLE \`users\` DROP COLUMN \`resetToken\``);
   }
 }

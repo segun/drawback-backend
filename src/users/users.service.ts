@@ -1,13 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
+import { ChatService } from '../chat/chat.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
@@ -26,6 +29,8 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(UserBlock)
     private readonly blocksRepository: Repository<UserBlock>,
+    @Inject(forwardRef(() => ChatService))
+    private readonly chatService: ChatService,
     private readonly cache: CacheService,
   ) {}
 
@@ -132,6 +137,10 @@ export class UsersService {
 
   async deleteAccount(userId: string): Promise<void> {
     const user = await this.findById(userId);
+
+    // Close all active drawing rooms for this user
+    await this.chatService.closeAllRoomsForUser(userId);
+
     await this.usersRepository.remove(user);
     // Account deletion affects all public user lists
     await Promise.all([
@@ -229,9 +238,13 @@ export class UsersService {
       return; // idempotent
     }
 
+    // Create the block
     const block = this.blocksRepository.create({ blockerId, blockedId });
     await this.blocksRepository.save(block);
     await this.invalidateBlockCaches(blockerId, blockedId);
+
+    // Close any active drawing rooms between these users
+    await this.chatService.closeRoomsBetweenUsers(blockerId, blockedId);
   }
 
   async unblockUser(blockerId: string, blockedId: string): Promise<void> {

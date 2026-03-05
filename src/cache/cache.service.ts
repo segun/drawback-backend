@@ -54,7 +54,6 @@ export class CacheService implements OnModuleDestroy {
 
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     const serialised = JSON.stringify(value);
-    this.logger.debug(`Cache set: ${key} (TTL ${ttlSeconds}s)`);
     try {
       await this.redis.set(key, serialised, 'EX', ttlSeconds);
     } catch (err) {

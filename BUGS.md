@@ -193,19 +193,31 @@ This matches the existing pattern used in `setMode()` and ensures cache consiste
 
 ## Minor Issues / Code Quality
 
-### 11. Unused socketId Field in User Entity
+### 11. Unused socketId Field in User Entity ✅ FIXED
 
-**Location:** [src/users/entities/user.entity.ts](src/users/entities/user.entity.ts#L47-L48)
+**Location:** [src/users/entities/user.entity.ts](src/users/entities/user.entity.ts)
 
-**Issue:** The `socketId` field exists in the User entity but with Redis, socket tracking is done via the `USER_SOCKET_KEY` hash. This field is only used as a fallback when Redis is not configured.
+**Status:** Fixed — socketId field removed from User entity as Redis is now mandatory.
 
-**Recommendation:** Consider removing this field if Redis is required in production, or document its purpose clearly.
+**Changes made:**
+1. Removed `socketId` column from User entity (lines 52-54)
+2. Created migration [1772300000000-RemoveSocketId.ts](src/migrations/1772300000000-RemoveSocketId.ts)
+   - `up()`: Drops the socketId column from users table
+   - `down()`: Re-adds the column if rollback is needed
+
+**Rationale:**
+- Since Redis is now mandatory (fix #8), socket tracking is always done via Redis `USER_SOCKET_KEY` hash
+- The database `socketId` field was only used as a fallback when Redis was unavailable
+- Removing this field simplifies the schema and eliminates confusion
+- Aligns with architectural decision to require Redis for all deployments
 
 ---
 
-### 12. Inconsistent Error Message in JWT Strategy
+### 12. Inconsistent Error Message in JWT Strategy ✅ FIXED
 
 **Location:** [src/auth/jwt.strategy.ts](src/auth/jwt.strategy.ts#L35-L36)
+
+**Status:** Fixed — UnauthorizedException now includes descriptive error message.
 
 **Issue:** When a user is not found or not activated, a generic `UnauthorizedException` is thrown without a message:
 ```typescript
@@ -221,55 +233,76 @@ throw new UnauthorizedException('Invalid or expired token');
 
 ---
 
-### 13. Duplicate Display Name Check Logic
+### 13. Duplicate Display Name Check Logic ✅ FIXED
 
 **Location:** [src/auth/auth.service.ts](src/auth/auth.service.ts#L114-L120) and [src/users/users.service.ts](src/users/users.service.ts#L77-L85)
 
-**Issue:** The `isDisplayNameAvailable` logic is duplicated in both services with slightly different signatures.
+**Status:** Fixed — AuthService now delegates to UsersService, eliminating code duplication.
 
-**Recommendation:** Keep only one implementation in `UsersService` and have `AuthService` delegate to it.
+**Issue:** The `isDisplayNameAvailable` logic was duplicated in both services with slightly different signatures.
+
+**Changes made:**
+1. **AuthModule** — Added `forwardRef(() => UsersModule)` to imports
+2. **UsersModule** — Added `forwardRef(() => AuthModule)` to imports (bidirectional circular dependency)
+3. **AuthService** — Injected `UsersService` using `@Inject(forwardRef(() => UsersService))`
+4. **AuthService.isDisplayNameAvailable** — Now delegates to `UsersService.isDisplayNameAvailable()`
+5. Removed duplicate implementation from AuthService
+
+**Rationale:**
+- UsersService implementation is more complete (handles currentUserId parameter for self-checks)
+- Eliminates code duplication and maintenance burden
+- Single source of truth for display name availability checks
+- `forwardRef` on both sides properly handles the circular dependency between modules
 
 ---
 
-### 14. Missing Emoji Validation in DrawEmoteDto
+### 14. Missing Emoji Validation in DrawEmoteDto ✅ FIXED
 
 **Location:** [src/realtime/dto/draw-emote.dto.ts](src/realtime/dto/draw-emote.dto.ts#L8-L10)
 
-**Issue:** The `emoji` field only validates that it's a non-empty string, but doesn't validate it's actually an emoji or limit its length:
+**Status:** Fixed — Emoji field now validates against a whitelist of allowed emojis.
+
+**Issue:** The `emoji` field only validated that it's a non-empty string, but didn't validate it's actually an allowed emoji:
 ```typescript
 @IsString()
 @IsNotEmpty()
 emoji!: string;
 ```
 
-**Recommended Fix:**
-```typescript
-@IsString()
-@MaxLength(10)  // Emoji sequences can be multiple code points
-@Matches(/^[\p{Emoji}]+$/u, { message: 'Must be a valid emoji' })
-emoji!: string;
-```
+**Changes made:**
+1. Defined `ALLOWED_EMOJIS` constant containing the 60 emojis available in the frontend
+2. Replaced `@IsString()` and `@IsNotEmpty()` with `@IsIn(ALLOWED_EMOJIS)`
+3. Added descriptive error message for invalid emojis
+
+**Rationale:**
+- Whitelist validation is more secure than regex matching
+- Ensures backend and frontend are in sync on allowed emojis
+- Prevents users from sending arbitrary emojis not shown in the UI
+- More maintainable than regex patterns
 
 ---
 
-### 15. Potential Memory Leak in clearRateMap
+### 15. Potential Memory Leak in clearRateMap ✅ FIXED
 
 **Location:** [src/realtime/draw.gateway.ts](src/realtime/draw.gateway.ts#L66-L70)
 
-**Issue:** The `clearRateMap` entries are only cleaned up in `handleDisconnect`. If sockets disconnect abnormally (e.g., server crash, network issues) without triggering the disconnect handler, entries could accumulate.
+**Status:** Fixed — Periodic cleanup now prevents memory leaks from abnormal disconnections.
 
-**Recommendation:** Add periodic cleanup of stale entries:
-```typescript
-// Add a cleanup interval in afterInit
-setInterval(() => {
-  const now = Date.now();
-  for (const [socketId, entry] of this.clearRateMap) {
-    if (now - entry.windowStart > CLEAR_RATE_WINDOW_MS * 2) {
-      this.clearRateMap.delete(socketId);
-    }
-  }
-}, 60_000); // Every minute
-```
+**Issue:** The `clearRateMap` and `strokeRateMap` entries were only cleaned up in `handleDisconnect`. If sockets disconnected abnormally (e.g., server crash, network issues) without triggering the disconnect handler, entries could accumulate.
+
+**Changes made:**
+1. Added periodic cleanup interval in `afterInit()` lifecycle hook
+2. Runs every 60 seconds (1 minute)
+3. Removes entries from `clearRateMap` older than 2× `CLEAR_RATE_WINDOW_MS` (10 seconds)
+4. Removes entries from `strokeRateMap` older than 2× `STROKE_RATE_WINDOW_MS` (2 seconds)
+5. Logs debug message when stale entries are cleaned up
+
+**Rationale:**
+- Prevents memory leaks from abnormal disconnections
+- 2× window threshold is conservative (allows for clock skew and edge cases)
+- Cleanup runs every minute (low overhead)
+- Handles both rate limit maps (clear and stroke)
+- Debug logging provides visibility into cleanup activity
 
 ---
 
@@ -279,7 +312,7 @@ setInterval(() => {
 |----------|-------|-------|-------------|
 | Critical | 4 | 4 | Security vulnerabilities requiring immediate attention |
 | High | 6 | 5 | Functional bugs affecting correctness |
-| Medium | 5 | 0 | Code quality and minor issues |
+| Medium | 5 | 4 | Code quality and minor issues |
 
 **Immediate Actions Required:**
 1. ✅ ~~Remove default JWT secret fallbacks~~

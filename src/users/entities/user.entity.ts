@@ -49,10 +49,6 @@ export class User {
   @Column({ type: 'datetime', nullable: true })
   resetTokenExpiry!: Date | null;
 
-  @Exclude()
-  @Column({ type: 'varchar', nullable: true, length: 128 })
-  socketId!: string | null;
-
   @CreateDateColumn()
   createdAt!: Date;
 

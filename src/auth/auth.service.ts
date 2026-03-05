@@ -2,6 +2,8 @@ import {
   ConflictException,
   Injectable,
   UnauthorizedException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -11,6 +13,7 @@ import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
+import { UsersService } from '../users/users.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -28,6 +31,8 @@ export class AuthService {
     private readonly usersRepository: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly usersService: UsersService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
@@ -146,11 +151,8 @@ export class AuthService {
   async isDisplayNameAvailable(
     displayName: string,
   ): Promise<{ available: boolean }> {
-    const normalised = displayName.toLowerCase();
-    const existing = await this.usersRepository.findOne({
-      where: { displayName: normalised },
-    });
-    return { available: !existing };
+    // Delegate to UsersService to avoid duplicate logic
+    return this.usersService.isDisplayNameAvailable(displayName);
   }
 
   /** How long (hours) a password-reset token remains valid. */

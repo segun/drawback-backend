@@ -5,7 +5,11 @@ import { UsersModule } from '../users/users.module';
 import { DrawGateway } from './draw.gateway';
 
 @Module({
-  imports: [UsersModule, AuthModule, forwardRef(() => ChatModule)],
+  imports: [
+    forwardRef(() => UsersModule),
+    forwardRef(() => AuthModule),
+    forwardRef(() => ChatModule),
+  ],
   providers: [DrawGateway],
   exports: [DrawGateway],
 })

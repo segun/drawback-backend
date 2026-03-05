@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddActivationTokenExpiry1772200000000
-  implements MigrationInterface
-{
+export class AddActivationTokenExpiry1772200000000 implements MigrationInterface {
   name = 'AddActivationTokenExpiry1772200000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

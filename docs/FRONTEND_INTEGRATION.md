@@ -36,7 +36,7 @@ Authorization: Bearer <accessToken>
 ```
 
 ### User object (returned everywhere)
-Sensitive fields (`passwordHash`, `activationToken`, `socketId`, `isActivated`) are **never** returned by the API.
+Sensitive fields (`passwordHash`, `activationToken`, `resetToken`, `isActivated`) are **never** returned by the API.
 
 ```jsonc
 {

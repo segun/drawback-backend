@@ -50,6 +50,7 @@ type MockedUsersService = {
 type MockedDrawGateway = {
   notifyChatRequested: jest.Mock;
   notifyChatResponse: jest.Mock;
+  forceCloseRoom: jest.Mock;
 };
 
 describe('ChatService', () => {
@@ -81,6 +82,7 @@ describe('ChatService', () => {
           useValue: {
             notifyChatRequested: jest.fn(),
             notifyChatResponse: jest.fn(),
+            forceCloseRoom: jest.fn(),
           },
         },
       ],
@@ -366,6 +368,52 @@ describe('ChatService', () => {
       await expect(
         service.deleteSavedChat('missing', 'user-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── removeAcceptedChat ────────────────────────────────────────────────
+
+  describe('removeAcceptedChat', () => {
+    const acceptedReq = makeRequest({
+      fromUserId: 'user-1',
+      toUserId: 'user-2',
+      status: ChatRequestStatus.ACCEPTED,
+    });
+
+    it('removes accepted chat and force closes drawing room', async () => {
+      chatRequestRepo.findOne.mockResolvedValue(acceptedReq);
+      chatRequestRepo.remove.mockResolvedValue({});
+
+      await service.removeAcceptedChat('req-1', 'user-1');
+
+      expect(drawGateway.forceCloseRoom).toHaveBeenCalledWith('chat:req-1');
+      expect(chatRequestRepo.remove).toHaveBeenCalledWith(acceptedReq);
+    });
+
+    it('throws NotFoundException when request not found', async () => {
+      chatRequestRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.removeAcceptedChat('missing', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ForbiddenException when user is not part of chat', async () => {
+      chatRequestRepo.findOne.mockResolvedValue(acceptedReq);
+
+      await expect(
+        service.removeAcceptedChat('req-1', 'user-3'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws BadRequestException when request is not accepted', async () => {
+      chatRequestRepo.findOne.mockResolvedValue(
+        makeRequest({ status: ChatRequestStatus.PENDING }),
+      );
+
+      await expect(
+        service.removeAcceptedChat('req-1', 'user-1'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
