@@ -32,7 +32,9 @@ class StrokeDataDto {
   to!: PointDto;
 
   @IsString()
-  @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'Color must be a valid hex color' })
+  @Matches(/^(#[0-9a-fA-F]{6}|eraser)$/, {
+    message: 'Color must be a valid hex color or "eraser"',
+  })
   color!: string;
 
   @IsNumber()
