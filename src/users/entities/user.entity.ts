@@ -31,6 +31,10 @@ export class User {
   @Column({ type: 'varchar', nullable: true, length: 128 })
   activationToken!: string | null;
 
+  @Exclude()
+  @Column({ type: 'datetime', nullable: true })
+  activationTokenExpiry!: Date | null;
+
   @Column({ type: 'enum', enum: UserMode, default: UserMode.PRIVATE })
   mode!: UserMode;
 

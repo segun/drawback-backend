@@ -109,7 +109,11 @@ export class UsersService {
 
     user.displayName = normalised;
     const saved = await this.usersRepository.save(user);
-    await this.cache.del(this.userKey(userId));
+    // Display name change affects search results — bust user cache and public lists
+    await Promise.all([
+      this.cache.del(this.userKey(userId)),
+      this.cache.delByPattern('public_users:*'),
+    ]);
     return saved;
   }
 
@@ -129,7 +133,11 @@ export class UsersService {
   async deleteAccount(userId: string): Promise<void> {
     const user = await this.findById(userId);
     await this.usersRepository.remove(user);
-    await this.cache.del(this.userKey(userId));
+    // Account deletion affects all public user lists
+    await Promise.all([
+      this.cache.del(this.userKey(userId)),
+      this.cache.delByPattern('public_users:*'),
+    ]);
   }
 
   async listPublic(currentUserId: string): Promise<User[]> {
@@ -199,7 +207,11 @@ export class UsersService {
     const user = await this.findById(userId);
     user.appearInSearches = appearInSearches;
     const saved = await this.usersRepository.save(user);
-    await this.cache.del(this.userKey(userId));
+    // Search visibility change affects public user lists
+    await Promise.all([
+      this.cache.del(this.userKey(userId)),
+      this.cache.delByPattern('public_users:*'),
+    ]);
     return saved;
   }
 

@@ -16,12 +16,18 @@ import { JwtStrategy } from './jwt.strategy';
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'changeme-secret'),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '7d') as StringValue,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const jwtSecret = config.get<string>('JWT_SECRET');
+        if (!jwtSecret) {
+          throw new Error('JWT_SECRET environment variable is required');
+        }
+        return {
+          secret: jwtSecret,
+          signOptions: {
+            expiresIn: (config.get<string>('JWT_EXPIRES_IN') ?? '7d') as StringValue,
+          },
+        };
+      },
     }),
     TypeOrmModule.forFeature([User]),
     MailModule,

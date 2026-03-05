@@ -46,7 +46,7 @@ import { UsersModule } from './users/users.module';
           // Formula: pool_size_per_worker × num_workers ≤ MySQL max_connections.
           // Default MySQL max_connections is 151; 20 per worker × 4 workers = 80.
           extra: {
-            connectionLimit: Number(config.get('DB_POOL_SIZE') ?? 20),
+            connectionLimit: Number(config.get('DB_POOL_SIZE')) || 20,
           },
         };
       },

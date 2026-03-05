@@ -20,6 +20,9 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
+  /** How long (hours) an activation token remains valid. */
+  static readonly ACTIVATION_TOKEN_TTL_HOURS = 24;
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -44,6 +47,9 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const activationToken = randomUUID();
+    const activationTokenExpiry = new Date(
+      Date.now() + AuthService.ACTIVATION_TOKEN_TTL_HOURS * 60 * 60 * 1000,
+    );
 
     const user = this.usersRepository.create({
       email: dto.email.toLowerCase(),
@@ -51,6 +57,7 @@ export class AuthService {
       displayName: dto.displayName.toLowerCase(),
       isActivated: false,
       activationToken,
+      activationTokenExpiry,
       mode: UserMode.PRIVATE,
     });
 
@@ -90,8 +97,17 @@ export class AuthService {
       };
     }
 
+    if (user.activationTokenExpiry && user.activationTokenExpiry < new Date()) {
+      return {
+        success: false,
+        email: user.email,
+        reason: 'Activation token has expired',
+      };
+    }
+
     user.isActivated = true;
     user.activationToken = null;
+    user.activationTokenExpiry = null;
     await this.usersRepository.save(user);
 
     return { success: true, email: user.email };
@@ -114,6 +130,9 @@ export class AuthService {
     }
 
     user.activationToken = randomUUID();
+    user.activationTokenExpiry = new Date(
+      Date.now() + AuthService.ACTIVATION_TOKEN_TTL_HOURS * 60 * 60 * 1000,
+    );
     await this.usersRepository.save(user);
     await this.mailService.sendActivationEmail(
       user.email,

@@ -6,46 +6,32 @@ import Redis from 'ioredis';
 @Injectable()
 export class CacheService implements OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
-  private readonly redis: Redis | null;
-
-  /** Fallback when REDIS_URL is absent — single-instance only */
-  private readonly mem = new Map<
-    string,
-    { value: string; expiresAt: number }
-  >();
+  private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
     const redisUrl = config.get<string>('REDIS_URL');
-    if (redisUrl) {
-      this.redis = new Redis(redisUrl, { lazyConnect: true });
-      this.redis.on('error', (err: Error) =>
-        this.logger.warn(`Redis cache error: ${err.message}`),
-      );
-    } else {
-      this.redis = null;
-      this.logger.warn(
-        'REDIS_URL not set — using in-memory cache (not suitable for multi-instance)',
+    if (!redisUrl) {
+      throw new Error(
+        'REDIS_URL environment variable is required. ' +
+          'Redis is mandatory for production deployments.',
       );
     }
+    this.redis = new Redis(redisUrl, { lazyConnect: true });
+    this.redis.on('error', (err: Error) =>
+      this.logger.error(`Redis cache error: ${err.message}`),
+    );
   }
 
   async get<T>(key: string): Promise<T | null> {
-    if (this.redis) {
-      try {
-        const raw = await this.redis.get(key);
-        return raw ? (JSON.parse(raw) as T) : null;
-      } catch {
-        // Redis unavailable — fall through to in-memory
-      }
+    try {
+      const raw = await this.redis.get(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch (err) {
+      this.logger.warn(
+        `Redis get failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null; // Treat as cache miss, not fallback to in-memory
     }
-
-    const entry = this.mem.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
-      this.mem.delete(key);
-      return null;
-    }
-    return JSON.parse(entry.value) as T;
   }
 
   /**
@@ -68,68 +54,54 @@ export class CacheService implements OnModuleDestroy {
 
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     const serialised = JSON.stringify(value);
-    if (this.redis) {
-      this.logger.debug(`Cache set: ${key} (TTL ${ttlSeconds}s)`);
-      try {
-        await this.redis.set(key, serialised, 'EX', ttlSeconds);
-        return;
-      } catch {
-        // Redis unavailable — fall through to in-memory
-      }
+    this.logger.debug(`Cache set: ${key} (TTL ${ttlSeconds}s)`);
+    try {
+      await this.redis.set(key, serialised, 'EX', ttlSeconds);
+    } catch (err) {
+      this.logger.warn(
+        `Redis set failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Do not fall back to in-memory — cache write failure is logged but not fatal
     }
-    this.mem.set(key, {
-      value: serialised,
-      expiresAt: Date.now() + ttlSeconds * 1_000,
-    });
   }
 
   async del(...keys: string[]): Promise<void> {
     if (!keys.length) return;
-    if (this.redis) {
-      this.logger.debug(`Cache del: ${keys.join(', ')}`);
-      try {
-        await this.redis.del(...keys);
-        return;
-      } catch {
-        // Redis unavailable — fall through to in-memory
-      }
+    this.logger.debug(`Cache del: ${keys.join(', ')}`);
+    try {
+      await this.redis.del(...keys);
+    } catch (err) {
+      this.logger.warn(
+        `Redis del failed for keys ${keys.join(', ')}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Do not fall back to in-memory — cache deletion failure is logged but not fatal
     }
-    keys.forEach((k) => this.mem.delete(k));
   }
 
   /**
    * Deletes all keys matching a glob pattern (e.g. `public_users:*`).
-   * Uses SCAN on Redis to avoid blocking; regex match on the in-memory store.
+   * Uses SCAN on Redis to avoid blocking.
    */
   async delByPattern(pattern: string): Promise<void> {
-    if (this.redis) {
-      this.logger.debug(`Cache delByPattern: ${pattern}`);
-      try {
-        let cursor = '0';
-        do {
-          const [next, keys] = await this.redis.scan(
-            cursor,
-            'MATCH',
-            pattern,
-            'COUNT',
-            100,
-          );
-          cursor = next;
-          if (keys.length) await this.redis.del(...keys);
-        } while (cursor !== '0');
-        return;
-      } catch {
-        // Redis unavailable — fall through to in-memory
-      }
-    }
-
-    const regex = new RegExp(
-      '^' +
-        pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') +
-        '$',
-    );
-    for (const key of this.mem.keys()) {
-      if (regex.test(key)) this.mem.delete(key);
+    this.logger.debug(`Cache delByPattern: ${pattern}`);
+    try {
+      let cursor = '0';
+      do {
+        const [next, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          100,
+        );
+        cursor = next;
+        if (keys.length) await this.redis.del(...keys);
+      } while (cursor !== '0');
+    } catch (err) {
+      this.logger.warn(
+        `Redis delByPattern failed for pattern ${pattern}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Do not fall back to in-memory — cache deletion failure is logged but not fatal
     }
   }
 

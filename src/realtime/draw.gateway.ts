@@ -35,8 +35,15 @@ import { JoinChatDto } from './dto/join-chat.dto';
 const CLEAR_RATE_LIMIT = 5;
 const CLEAR_RATE_WINDOW_MS = 5_000;
 
+/** Max draw.stroke events allowed per socket per second. */
+const STROKE_RATE_LIMIT = 60;
+const STROKE_RATE_WINDOW_MS = 1_000;
+
 /** Redis key prefix for the user→socketId mapping shared across all workers. */
 const USER_SOCKET_KEY = 'drawback:user-socket';
+
+/** Redis key prefix for the reverse socketId→userId mapping shared across all workers. */
+const SOCKET_USER_KEY_PREFIX = 'drawback:socket-user';
 
 @WebSocketGateway({
   namespace: '/drawback',
@@ -74,15 +81,24 @@ export class DrawGateway
     { count: number; windowStart: number }
   >();
 
+  /**
+   * Per-socket stroke rate limiting: socketId → { count, windowStart }.
+   * Resets every STROKE_RATE_WINDOW_MS.
+   */
+  private readonly strokeRateMap = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
+
   @WebSocketServer()
   server!: Server;
 
   /**
-   * Shared Redis client used for the user→socket hash and (when configured)
+   * Shared Redis client used for the user→socket hash and
    * as the pub/sub pub client. Kept as an instance property so it can be
    * reused by emitToUser without creating extra connections.
    */
-  private redisClient: Redis | null = null;
+  private redisClient!: Redis;
 
   constructor(
     private readonly usersService: UsersService,
@@ -96,14 +112,14 @@ export class DrawGateway
     const redisHost = this.config.get<string>('REDIS_HOST');
 
     if (!redisHost) {
-      this.logger.warn(
-        'REDIS_HOST not set — Redis adapter disabled. ' +
-          'Running without Redis is only suitable for single-process development.',
+      this.logger.error(
+        '❌ REDIS_HOST environment variable is required. ' +
+          'Redis is mandatory for production deployments and multi-instance support.',
       );
-      return;
+      process.exit(1);
     }
 
-    const redisPort = Number(this.config.get<string>('REDIS_PORT') ?? 6379);
+    const redisPort = Number(this.config.get<string>('REDIS_PORT')) || 6379;
     const redisPassword = this.config.get<string>('REDIS_PASSWORD');
 
     const redisOptions: RedisOptions = {
@@ -126,9 +142,7 @@ export class DrawGateway
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.redisClient) {
-      await this.redisClient.quit();
-    }
+    await this.redisClient.quit();
   }
 
   async handleConnection(client: Socket): Promise<void> {
@@ -142,10 +156,11 @@ export class DrawGateway
 
     this.socketToUser.set(client.id, userId);
 
-    // Persist user→socket in Redis (shared across all processes/workers).
-    if (this.redisClient) {
-      await this.redisClient.hset(USER_SOCKET_KEY, userId, client.id);
-    }
+    // Persist user→socket and socket→user mappings in Redis (shared across all processes/workers).
+    await Promise.all([
+      this.redisClient.hset(USER_SOCKET_KEY, userId, client.id),
+      this.redisClient.set(`${SOCKET_USER_KEY_PREFIX}:${client.id}`, userId),
+    ]);
 
     this.logger.debug(`Socket connected: ${client.id} for user ${userId}`);
   }
@@ -166,15 +181,20 @@ export class DrawGateway
 
     this.socketToUser.delete(client.id);
     this.clearRateMap.delete(client.id);
+    this.strokeRateMap.delete(client.id);
 
     // Remove from Redis only if this socket is still the current one for the
     // user (guards against a reconnect on another worker overwriting then being
     // incorrectly cleared here).
-    if (this.redisClient) {
-      const current = await this.redisClient.hget(USER_SOCKET_KEY, userId);
-      if (current === client.id) {
-        await this.redisClient.hdel(USER_SOCKET_KEY, userId);
-      }
+    const current = await this.redisClient.hget(USER_SOCKET_KEY, userId);
+    if (current === client.id) {
+      await Promise.all([
+        this.redisClient.hdel(USER_SOCKET_KEY, userId),
+        this.redisClient.del(`${SOCKET_USER_KEY_PREFIX}:${client.id}`),
+      ]);
+    } else {
+      // Still clean up the reverse mapping even if user reconnected elsewhere
+      await this.redisClient.del(`${SOCKET_USER_KEY_PREFIX}:${client.id}`);
     }
 
     this.logger.debug(`Socket disconnected: ${client.id} for user ${userId}`);
@@ -218,7 +238,19 @@ export class DrawGateway
       const peers: string[] = [];
       for (const socketId of roomSockets) {
         if (socketId === client.id) continue;
-        const peerId = this.socketToUser.get(socketId);
+
+        // First check local cache (O(1) for sockets on this worker)
+        let peerId = this.socketToUser.get(socketId);
+
+        // If not found locally, check the reverse mapping in Redis
+        // (handles sockets connected to other workers in multi-process deployments)
+        if (!peerId) {
+          const redisResult = await this.redisClient.get(
+            `${SOCKET_USER_KEY_PREFIX}:${socketId}`,
+          );
+          peerId = redisResult ?? undefined;
+        }
+
         if (peerId) peers.push(peerId);
       }
 
@@ -266,6 +298,11 @@ export class DrawGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: DrawStrokeDto,
   ): void {
+    if (this.isStrokeRateLimited(client.id)) {
+      // Silently drop excessive strokes to prevent flooding
+      return;
+    }
+
     // Use the cached room — validated once during chat.join.
     // No DB query needed on the hot drawing path.
     const room = this.socketToRoom.get(client.id);
@@ -330,19 +367,7 @@ export class DrawGateway
     event: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    let socketId: string | null | undefined;
-
-    if (this.redisClient) {
-      socketId = await this.redisClient.hget(USER_SOCKET_KEY, userId);
-    } else {
-      // No Redis — fall back to DB-persisted socketId (single-process only).
-      try {
-        const user = await this.usersService.findById(userId);
-        socketId = user.socketId ?? undefined;
-      } catch {
-        return;
-      }
-    }
+    const socketId = await this.redisClient.hget(USER_SOCKET_KEY, userId);
 
     if (!socketId) {
       this.logger.debug(
@@ -375,6 +400,25 @@ export class DrawGateway
     entry.count++;
     this.clearRateMap.set(socketId, entry);
     return entry.count > CLEAR_RATE_LIMIT;
+  }
+
+  private isStrokeRateLimited(socketId: string): boolean {
+    const now = Date.now();
+    const entry = this.strokeRateMap.get(socketId) ?? {
+      count: 0,
+      windowStart: now,
+    };
+
+    if (now - entry.windowStart >= STROKE_RATE_WINDOW_MS) {
+      entry.count = 1;
+      entry.windowStart = now;
+      this.strokeRateMap.set(socketId, entry);
+      return false;
+    }
+
+    entry.count++;
+    this.strokeRateMap.set(socketId, entry);
+    return entry.count > STROKE_RATE_LIMIT;
   }
 
   // ---------------------------------------------------------------------------
