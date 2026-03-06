@@ -42,6 +42,7 @@ jobs:
       DB_NAME: drawback_test
       REDIS_URL: redis://127.0.0.1:6379
       JWT_SECRET: test-secret-for-ci
+      JWT_EXPIRES_IN: 7d
       MAIL_HOST: localhost
       MAIL_PORT: 1025
       MAIL_USER: ""
