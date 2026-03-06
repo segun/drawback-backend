@@ -36,7 +36,7 @@ const CLEAR_RATE_LIMIT = 5;
 const CLEAR_RATE_WINDOW_MS = 5_000;
 
 /** Max draw.stroke events allowed per socket per second. */
-const STROKE_RATE_LIMIT = 60;
+const STROKE_RATE_LIMIT = 120;
 const STROKE_RATE_WINDOW_MS = 1_000;
 
 /** Redis key prefix for the user→socketId mapping shared across all workers. */
