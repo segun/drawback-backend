@@ -22,11 +22,14 @@ import { JwtStrategy } from './jwt.strategy';
         if (!jwtSecret) {
           throw new Error('JWT_SECRET environment variable is required');
         }
+        const jwtExpiresIn = config.get<string>('JWT_EXPIRES_IN');
+        if (!jwtExpiresIn) {
+          throw new Error('JWT_EXPIRES_IN environment variable is required');
+        }
         return {
           secret: jwtSecret,
           signOptions: {
-            expiresIn: (config.get<string>('JWT_EXPIRES_IN') ??
-              '7d') as StringValue,
+            expiresIn: jwtExpiresIn as StringValue,
           },
         };
       },
