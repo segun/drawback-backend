@@ -341,7 +341,7 @@ describe('Drawback API (e2e)', () => {
       const findOneCalls: unknown[] = [];
       usersRepo.findOne.mockImplementation((args: unknown) => {
         findOneCalls.push(args);
-        // eslint-disable-next-line no-console
+
         console.error(
           `DEBUG findOne call #${findOneCalls.length}:`,
           JSON.stringify(args),

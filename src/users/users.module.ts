@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ChatModule } from '../chat/chat.module';
+import { ChatRequest } from '../chat/entities/chat-request.entity';
 import { StorageModule } from '../storage/storage.module';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
@@ -10,7 +11,7 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserBlock]),
+    TypeOrmModule.forFeature([User, UserBlock, ChatRequest]),
     forwardRef(() => AuthModule),
     forwardRef(() => ChatModule),
     StorageModule,

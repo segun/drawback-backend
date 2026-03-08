@@ -104,6 +104,118 @@ export class CacheService implements OnModuleDestroy {
     }
   }
 
+  // ── Redis List Operations ──────────────────────────────────────────────
+
+  /**
+   * Pop an item from the left (head) of a Redis list.
+   * Returns null if the list is empty or doesn't exist.
+   */
+  async lpop<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.redis.lpop(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch (err) {
+      this.logger.warn(
+        `Redis lpop failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Push one or more items to the right (tail) of a Redis list.
+   * Items are JSON-serialized before pushing.
+   */
+  async rpush<T>(key: string, ...values: T[]): Promise<void> {
+    if (!values.length) return;
+    try {
+      const serialised = values.map((v) => JSON.stringify(v));
+      await this.redis.rpush(key, ...serialised);
+    } catch (err) {
+      this.logger.warn(
+        `Redis rpush failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Remove elements from a list. Count determines behavior:
+   * - count > 0: Remove elements from head to tail
+   * - count < 0: Remove elements from tail to head
+   * - count = 0: Remove all matching elements
+   *
+   * The value is JSON-serialized before matching.
+   * Returns the number of removed elements.
+   */
+  async lrem<T>(key: string, count: number, value: T): Promise<number> {
+    try {
+      const serialised = JSON.stringify(value);
+      return await this.redis.lrem(key, count, serialised);
+    } catch (err) {
+      this.logger.warn(
+        `Redis lrem failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Set an expiry (TTL) on an existing key.
+   */
+  async expire(key: string, ttlSeconds: number): Promise<void> {
+    try {
+      await this.redis.expire(key, ttlSeconds);
+    } catch (err) {
+      this.logger.warn(
+        `Redis expire failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // ── Distributed Locking ─────────────────────────────────────────────────
+
+  /**
+   * Acquire a distributed lock using Redis SET NX EX.
+   * Returns a unique token if the lock was acquired, or null if it's already held.
+   * The lock automatically expires after ttlSeconds.
+   */
+  async acquireLock(key: string, ttlSeconds: number): Promise<string | null> {
+    try {
+      const token = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+      const result = await this.redis.set(key, token, 'EX', ttlSeconds, 'NX');
+      return result === 'OK' ? token : null;
+    } catch (err) {
+      this.logger.warn(
+        `Redis acquireLock failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Release a distributed lock by verifying the token matches before deleting.
+   * Uses a Lua script to ensure atomicity.
+   * Returns true if the lock was released, false if token didn't match or key doesn't exist.
+   */
+  async releaseLock(key: string, token: string): Promise<boolean> {
+    try {
+      const script = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      const result = await this.redis.eval(script, 1, key, token);
+      return result === 1;
+    } catch (err) {
+      this.logger.warn(
+        `Redis releaseLock failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  }
+
   async onModuleDestroy() {
     await this.redis?.quit();
   }

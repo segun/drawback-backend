@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   BadRequestException,
   ConflictException,
@@ -17,13 +22,13 @@ import { DiscoveryUserResponseDto } from './dto/discovery-user-response.dto';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
+import { ChatRequest } from '../chat/entities/chat-request.entity';
 import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
 
 const TTL_USER = 3600;
 const TTL_BLOCKED = 30;
 const TTL_PUBLIC = 30;
 const TTL_BLOCKED_LIST = 60;
-const TTL_DISCOVERY_RANDOM = 60;
 
 @Injectable()
 export class UsersService {
@@ -32,6 +37,8 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(UserBlock)
     private readonly blocksRepository: Repository<UserBlock>,
+    @InjectRepository(ChatRequest)
+    private readonly chatRequestRepository: Repository<ChatRequest>,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly cache: CacheService,
@@ -56,10 +63,6 @@ export class UsersService {
 
   private blockedListKey(userId: string) {
     return `blocked_list:${userId}`;
-  }
-
-  private discoveryRandomKey(excludeUserId: string) {
-    return `discovery:random:${excludeUserId}`;
   }
 
   private async invalidateBlockCaches(
@@ -294,6 +297,34 @@ export class UsersService {
 
   // ── Discovery Game ──────────────────────────────────────────────────────
 
+  /**
+   * Check if two users have an active chat request (PENDING or ACCEPTED).
+   * Results are cached for 30 seconds to reduce DB load.
+   */
+  private async hasActiveChatRequest(
+    userAId: string,
+    userBId: string,
+  ): Promise<boolean> {
+    const cacheKey = `has_chat:${[userAId, userBId].sort().join(':')}`;
+    const cached = await this.cache.get<boolean>(cacheKey);
+    if (cached !== null) return cached;
+
+    const count = await this.chatRequestRepository
+      .createQueryBuilder('cr')
+      .where(
+        '((cr.fromUserId = :userAId AND cr.toUserId = :userBId) OR (cr.fromUserId = :userBId AND cr.toUserId = :userAId))',
+        { userAId, userBId },
+      )
+      .andWhere('cr.status IN (:...statuses)', {
+        statuses: [ChatRequestStatus.PENDING, ChatRequestStatus.ACCEPTED],
+      })
+      .getCount();
+
+    const hasChat = count > 0;
+    await this.cache.set(cacheKey, hasChat, 30);
+    return hasChat;
+  }
+
   async setDiscoveryGame(
     userId: string,
     appearInDiscoveryGame: boolean,
@@ -326,22 +357,191 @@ export class UsersService {
     }
 
     const saved = await this.usersRepository.save(user);
-    // Discovery game state affects discovery endpoint — bust caches
-    await Promise.all([
-      this.cache.del(this.userKey(userId)),
-      this.cache.delByPattern('discovery:*'),
-    ]);
+
+    // Discovery game state affects discovery endpoint — invalidate caches
+    if (appearInDiscoveryGame) {
+      // User joined or updated image — delete queue to force refill with fresh data
+      await this.cache.del(
+        this.userKey(userId),
+        'discovery:queue',
+        'discovery:empty',
+      );
+    } else {
+      // User exited — remove them from the queue if present
+      const queueKey = 'discovery:queue';
+      const userDto: DiscoveryUserResponseDto = {
+        id: user.id,
+        displayName: user.displayName,
+        discoveryImageUrl: user.discoveryImageUrl ?? '',
+      };
+      await Promise.all([
+        this.cache.del(this.userKey(userId), 'discovery:empty'),
+        this.cache.lrem(queueKey, 0, userDto),
+      ]);
+    }
+
     return saved;
   }
 
   async getRandomDiscoveryUser(
     excludeUserId: string,
   ): Promise<DiscoveryUserResponseDto | null> {
-    const key = this.discoveryRandomKey(excludeUserId);
-    const cached = await this.cache.get<DiscoveryUserResponseDto>(key);
-    if (cached) return cached;
+    const queueKey = 'discovery:queue';
+    const emptyKey = 'discovery:empty';
+    const lockKey = 'discovery:refill_lock';
 
-    // Find a random user where appearInDiscoveryGame = true and has an image
+    // Check if the pool is known to be empty
+    const isEmpty = await this.cache.get<boolean>(emptyKey);
+    if (isEmpty) return null;
+
+    // Try to pop a user from the global queue
+    let maxAttempts = 10; // Prevent infinite loop if queue only has excludeUserId
+    while (maxAttempts-- > 0) {
+      const user = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
+
+      if (!user) {
+        // Queue is empty — attempt to refill it
+        return this.refillDiscoveryQueue(
+          excludeUserId,
+          queueKey,
+          emptyKey,
+          lockKey,
+        );
+      }
+
+      // Skip if the user is the requester themselves
+      if (user.id === excludeUserId) {
+        continue;
+      }
+
+      // Skip if there's already an active chat request with this user
+      const hasChat = await this.hasActiveChatRequest(excludeUserId, user.id);
+      if (hasChat) {
+        continue;
+      }
+
+      return user;
+    }
+
+    // Fallback: if queue only contains excludeUserId entries, refill
+    return this.refillDiscoveryQueue(
+      excludeUserId,
+      queueKey,
+      emptyKey,
+      lockKey,
+    );
+  }
+
+  /**
+   * Refill the discovery queue with a fresh shuffled list of all eligible users.
+   * Uses distributed locking to prevent race conditions when multiple requests
+   * arrive simultaneously on an empty queue.
+   */
+  private async refillDiscoveryQueue(
+    excludeUserId: string,
+    queueKey: string,
+    emptyKey: string,
+    lockKey: string,
+  ): Promise<DiscoveryUserResponseDto | null> {
+    // Try to acquire the lock (10-second TTL)
+    const lockToken = await this.cache.acquireLock(lockKey, 10);
+
+    if (!lockToken) {
+      // Another server/request is refilling — wait and retry
+      for (let i = 0; i < 3; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const user = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
+        if (!user) continue;
+
+        // Skip if it's the requester or has active chat
+        if (user.id === excludeUserId) continue;
+        const hasChat = await this.hasActiveChatRequest(excludeUserId, user.id);
+        if (hasChat) continue;
+
+        return user;
+      }
+
+      // Still empty after retries — fallback to direct DB query
+      return this.getRandomDiscoveryUserDirect(excludeUserId);
+    }
+
+    try {
+      // Lock acquired — double-check queue is still empty
+      const checkUser =
+        await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
+      if (checkUser) {
+        // Another process refilled while we were acquiring the lock
+        if (checkUser.id !== excludeUserId) {
+          const hasChat = await this.hasActiveChatRequest(
+            excludeUserId,
+            checkUser.id,
+          );
+          if (!hasChat) {
+            return checkUser;
+          }
+        }
+        // If it's the excludeUserId or has active chat, fall through to refill
+      }
+
+      // Fetch all eligible users from DB
+      const users = await this.usersRepository
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.displayName', 'user.discoveryImageUrl'])
+        .where('user.appearInDiscoveryGame = :enabled', { enabled: true })
+        .andWhere('user.discoveryImageUrl IS NOT NULL')
+        .andWhere('user.id != :excludeUserId', { excludeUserId })
+        .getMany();
+
+      if (users.length === 0) {
+        // No eligible users — cache this fact to avoid repeated queries
+        await this.cache.set(emptyKey, true, 60);
+        return null;
+      }
+
+      // Shuffle the array using Fisher-Yates algorithm
+      for (let i = users.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [users[i], users[j]] = [users[j], users[i]];
+      }
+
+      // Convert to DTOs
+      const dtos: DiscoveryUserResponseDto[] = users.map((u) => ({
+        id: u.id,
+        displayName: u.displayName,
+        discoveryImageUrl: u.discoveryImageUrl!,
+      }));
+
+      // Push all users to the queue
+      await this.cache.rpush(queueKey, ...dtos);
+
+      // Set 1-hour TTL on the queue so it auto-refreshes
+      await this.cache.expire(queueKey, 3600);
+
+      // Pop and return the first user
+      const result = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
+      if (result && result.id !== excludeUserId) {
+        const hasChat = await this.hasActiveChatRequest(
+          excludeUserId,
+          result.id,
+        );
+        if (!hasChat) {
+          return result;
+        }
+      }
+      return null;
+    } finally {
+      // Always release the lock
+      await this.cache.releaseLock(lockKey, lockToken);
+    }
+  }
+
+  /**
+   * Fallback method: query DB directly for a random discovery user.
+   * Used when lock contention is too high or queue operations fail.
+   */
+  private async getRandomDiscoveryUserDirect(
+    excludeUserId: string,
+  ): Promise<DiscoveryUserResponseDto | null> {
     const users = await this.usersRepository
       .createQueryBuilder('user')
       .select(['user.id', 'user.displayName', 'user.discoveryImageUrl'])
@@ -356,13 +556,10 @@ export class UsersService {
       return null;
     }
 
-    const result: DiscoveryUserResponseDto = {
+    return {
       id: users[0].id,
       displayName: users[0].displayName,
       discoveryImageUrl: users[0].discoveryImageUrl!,
     };
-
-    await this.cache.set(key, result, TTL_DISCOVERY_RANDOM);
-    return result;
   }
 }
