@@ -1,7 +1,7 @@
 - [x] Still having race condition where 2 people are waiting for each other.
 - [ ] Suddenly logs out in the middle of a drawing session. (Token expired or something like that)
 - [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.
-- [ ] Chat deleted, User Blocked socket event
+- [x] Chat deleted, User Blocked socket event
 - [x] Reset password feature.
 - [ ] Add an About page with a link to the GitHub repo and a link to the privacy policy.
 - [ ] When showing profile, disconnect socket because we don't want to receive drawing updates when we're not drawing.

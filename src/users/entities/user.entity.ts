@@ -1,4 +1,4 @@
-import { Exclude } from 'class-transformer';
+import { Exclude, Transform } from 'class-transformer';
 import {
   Column,
   CreateDateColumn,
@@ -25,6 +25,7 @@ export class User {
 
   @Exclude()
   @Column({ default: false })
+  @Transform(({ value }) => Boolean(value))
   isActivated!: boolean;
 
   @Exclude()
@@ -39,7 +40,15 @@ export class User {
   mode!: UserMode;
 
   @Column({ default: true })
+  @Transform(({ value }) => Boolean(value))
   appearInSearches!: boolean;
+
+  @Column({ default: false })
+  @Transform(({ value }) => Boolean(value))
+  appearInDiscoveryGame!: boolean;
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  discoveryImageUrl!: string | null;
 
   @Exclude()
   @Column({ type: 'varchar', nullable: true, length: 128 })

@@ -11,7 +11,9 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 import { CacheService } from '../cache/cache.service';
 import { ChatService } from '../chat/chat.service';
+import { StorageService } from '../storage/storage.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DiscoveryUserResponseDto } from './dto/discovery-user-response.dto';
 import { UserBlock } from './entities/user-block.entity';
 import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
@@ -21,6 +23,7 @@ const TTL_USER = 3600;
 const TTL_BLOCKED = 30;
 const TTL_PUBLIC = 30;
 const TTL_BLOCKED_LIST = 60;
+const TTL_DISCOVERY_RANDOM = 60;
 
 @Injectable()
 export class UsersService {
@@ -32,6 +35,7 @@ export class UsersService {
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly cache: CacheService,
+    private readonly storage: StorageService,
   ) {}
 
   // ── Cache key helpers ───────────────────────────────────────────────────
@@ -52,6 +56,10 @@ export class UsersService {
 
   private blockedListKey(userId: string) {
     return `blocked_list:${userId}`;
+  }
+
+  private discoveryRandomKey(excludeUserId: string) {
+    return `discovery:random:${excludeUserId}`;
   }
 
   private async invalidateBlockCaches(
@@ -281,6 +289,80 @@ export class UsersService {
       .getCount();
     const result = count > 0;
     await this.cache.set(key, result, TTL_BLOCKED);
+    return result;
+  }
+
+  // ── Discovery Game ──────────────────────────────────────────────────────
+
+  async setDiscoveryGame(
+    userId: string,
+    appearInDiscoveryGame: boolean,
+    base64Image?: string,
+  ): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (appearInDiscoveryGame) {
+      // Enabling discovery game — require image
+      if (!base64Image) {
+        throw new BadRequestException(
+          'base64Image is required when enabling discovery game',
+        );
+      }
+
+      // Upload image to Cloudflare R2
+      const imageUrl = await this.storage.uploadDiscoveryImage(
+        userId,
+        base64Image,
+      );
+      user.discoveryImageUrl = imageUrl;
+      user.appearInDiscoveryGame = true;
+    } else {
+      // Disabling discovery game — delete image
+      if (user.discoveryImageUrl) {
+        await this.storage.deleteDiscoveryImage(userId);
+      }
+      user.discoveryImageUrl = null;
+      user.appearInDiscoveryGame = false;
+    }
+
+    const saved = await this.usersRepository.save(user);
+    // Discovery game state affects discovery endpoint — bust caches
+    await Promise.all([
+      this.cache.del(this.userKey(userId)),
+      this.cache.delByPattern('discovery:*'),
+    ]);
+    return saved;
+  }
+
+  async getRandomDiscoveryUser(
+    excludeUserId: string,
+  ): Promise<DiscoveryUserResponseDto | null> {
+    const key = this.discoveryRandomKey(excludeUserId);
+    const cached = await this.cache.get<DiscoveryUserResponseDto>(key);
+    if (cached) return cached;
+
+    // Find a random user where appearInDiscoveryGame = true and has an image
+    const users = await this.usersRepository
+      .createQueryBuilder('user')
+      .select(['user.id', 'user.displayName', 'user.discoveryImageUrl'])
+      .where('user.appearInDiscoveryGame = :enabled', { enabled: true })
+      .andWhere('user.discoveryImageUrl IS NOT NULL')
+      .andWhere('user.id != :excludeUserId', { excludeUserId })
+      .orderBy('RAND()')
+      .limit(1)
+      .getMany();
+
+    if (users.length === 0) {
+      return null;
+    }
+
+    const result: DiscoveryUserResponseDto = {
+      id: users[0].id,
+      displayName: users[0].displayName,
+      discoveryImageUrl: users[0].discoveryImageUrl!,
+    };
+
+    await this.cache.set(key, result, TTL_DISCOVERY_RANDOM);
     return result;
   }
 }

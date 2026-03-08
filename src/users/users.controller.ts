@@ -19,6 +19,8 @@ import { User } from './entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SetUserModeDto } from './dto/set-user-mode.dto';
 import { SetAppearInSearchesDto } from './dto/set-appear-in-searches.dto';
+import { SetDiscoveryGameDto } from './dto/set-discovery-game.dto';
+import { DiscoveryUserResponseDto } from './dto/discovery-user-response.dto';
 import { UsersService } from './users.service';
 
 @UseGuards(JwtAuthGuard)
@@ -49,6 +51,18 @@ export class UsersController {
     return this.usersService.setAppearInSearches(user.id, dto.appearInSearches);
   }
 
+  @Patch('me/discovery-game')
+  setDiscoveryGame(
+    @CurrentUser() user: User,
+    @Body() dto: SetDiscoveryGameDto,
+  ) {
+    return this.usersService.setDiscoveryGame(
+      user.id,
+      dto.appearInDiscoveryGame,
+      dto.base64Image,
+    );
+  }
+
   @Delete('me')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteMe(@CurrentUser() user: User) {
@@ -64,6 +78,17 @@ export class UsersController {
   @Throttle({ search: { ttl: 60000, limit: 20 } })
   search(@CurrentUser() user: User, @Query('q') q: string) {
     return this.usersService.searchByDisplayName(q ?? '', user.id);
+  }
+
+  // ── Discovery Game ───────────────────────────────────────────────────────
+
+  @Get('discovery/random')
+  @Throttle({ short: { ttl: 1000, limit: 10 } })
+  async getRandomDiscovery(
+    @CurrentUser() user: User,
+  ): Promise<{ user: DiscoveryUserResponseDto | null }> {
+    const randomUser = await this.usersService.getRandomDiscoveryUser(user.id);
+    return { user: randomUser };
   }
 
   // ── Blocking ─────────────────────────────────────────────────────────────
