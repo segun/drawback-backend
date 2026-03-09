@@ -23,7 +23,9 @@
     "migration:run": "yarn typeorm migration:run",
     "migration:revert": "yarn typeorm migration:revert",
     "migration:show": "yarn typeorm migration:show",
-    "db:reset": "yarn typeorm schema:drop"
+    "db:reset": "yarn typeorm schema:drop",
+    "backup:list": "TS_NODE_PROJECT=tsconfig.json ts-node src/backup/cli.ts list",
+    "backup:restore": "TS_NODE_PROJECT=tsconfig.json ts-node src/backup/cli.ts restore"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1004.0",
@@ -34,6 +36,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.14",
+    "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.1.14",
@@ -42,6 +45,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
     "ioredis": "^5.9.3",
+    "mongodb": "7.0",
     "mysql2": "^3.17.4",
     "nodemailer": "^8.0.1",
     "passport": "^0.7.0",

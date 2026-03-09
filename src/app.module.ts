@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { BackupModule } from './backup/backup.module';
 import { CacheModule } from './cache/cache.module';
 import { ChatModule } from './chat/chat.module';
 import { MailModule } from './mail/mail.module';
@@ -14,6 +16,7 @@ import { UsersModule } from './users/users.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     CacheModule,
     ThrottlerModule.forRoot([
       { name: 'short', ttl: 1000, limit: 3 },
@@ -43,6 +46,7 @@ import { UsersModule } from './users/users.module';
           migrations: ['dist/migrations/*.js'],
           migrationsRun: false,
           autoLoadEntities: true,
+          logging: false,
           // Allow enough connections for PM2 cluster workers.
           // Formula: pool_size_per_worker × num_workers ≤ MySQL max_connections.
           // Default MySQL max_connections is 151; 20 per worker × 4 workers = 80.
@@ -57,6 +61,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ChatModule,
     RealtimeModule,
+    BackupModule,
     PurchasesModule,
   ],
   controllers: [AppController],

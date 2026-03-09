@@ -14,10 +14,10 @@ export class PurchasesService {
 
   async unlockDiscoveryAccess(userId: string): Promise<User> {
     await this.userRepository.update(userId, { hasDiscoveryAccess: true });
-    
+
     // Invalidate user cache so the updated field is immediately visible
     await this.cache.del(`user:${userId}`);
-    
+
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new Error('User not found');
