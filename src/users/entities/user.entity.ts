@@ -50,6 +50,10 @@ export class User {
   @Column({ type: 'varchar', length: 512, nullable: true })
   discoveryImageUrl!: string | null;
 
+  @Column({ default: false })
+  @Transform(({ value }) => Boolean(value))
+  hasDiscoveryAccess!: boolean;
+
   @Exclude()
   @Column({ type: 'varchar', nullable: true, length: 128 })
   resetToken!: string | null;

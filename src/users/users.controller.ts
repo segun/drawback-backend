@@ -87,7 +87,7 @@ export class UsersController {
   async getRandomDiscovery(
     @CurrentUser() user: User,
   ): Promise<{ user: DiscoveryUserResponseDto | null }> {
-    const randomUser = await this.usersService.getRandomDiscoveryUser(user.id);
+    const randomUser = await this.usersService.getRandomDiscoveryUser(user);
     return { user: randomUser };
   }
 

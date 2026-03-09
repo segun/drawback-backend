@@ -69,7 +69,6 @@ export class MailService {
     const templatePath = path.join(
       __dirname,
       '..',
-      '..',
       'auth',
       'public',
       'password-reset.html',
@@ -110,7 +109,6 @@ export class MailService {
 
     const templatePath = path.join(
       __dirname,
-      '..',
       '..',
       'auth',
       'public',

@@ -6,6 +6,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -384,8 +385,16 @@ export class UsersService {
   }
 
   async getRandomDiscoveryUser(
-    excludeUserId: string,
+    currentUser: User,
   ): Promise<DiscoveryUserResponseDto | null> {
+    // Check if user has access to discovery feature
+    if (!currentUser.hasDiscoveryAccess) {
+      throw new ForbiddenException({
+        error: 'DISCOVERY_LOCKED',
+        message: 'Discovery requires premium access',
+      });
+    }
+
     const queueKey = 'discovery:queue';
     const emptyKey = 'discovery:empty';
     const lockKey = 'discovery:refill_lock';
@@ -402,7 +411,7 @@ export class UsersService {
       if (!user) {
         // Queue is empty — attempt to refill it
         return this.refillDiscoveryQueue(
-          excludeUserId,
+          currentUser.id,
           queueKey,
           emptyKey,
           lockKey,
@@ -410,12 +419,12 @@ export class UsersService {
       }
 
       // Skip if the user is the requester themselves
-      if (user.id === excludeUserId) {
+      if (user.id === currentUser.id) {
         continue;
       }
 
       // Skip if there's already an active chat request with this user
-      const hasChat = await this.hasActiveChatRequest(excludeUserId, user.id);
+      const hasChat = await this.hasActiveChatRequest(currentUser.id, user.id);
       if (hasChat) {
         continue;
       }
@@ -423,9 +432,9 @@ export class UsersService {
       return user;
     }
 
-    // Fallback: if queue only contains excludeUserId entries, refill
+    // Fallback: if queue only contains currentUser entries, refill
     return this.refillDiscoveryQueue(
-      excludeUserId,
+      currentUser.id,
       queueKey,
       emptyKey,
       lockKey,
