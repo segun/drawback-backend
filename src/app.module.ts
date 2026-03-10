@@ -3,10 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { BackupModule } from './backup/backup.module';
-import { CacheModule } from './cache/cache.module';
 import { ChatModule } from './chat/chat.module';
 import { MailModule } from './mail/mail.module';
 import { PurchasesModule } from './purchases/purchases.module';
@@ -17,12 +17,12 @@ import { UsersModule } from './users/users.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    CacheModule,
     ThrottlerModule.forRoot([
       { name: 'short', ttl: 1000, limit: 3 },
       { name: 'auth', ttl: 60000, limit: 10 },
       { name: 'search', ttl: 60000, limit: 20 },
       { name: 'dnCheck', ttl: 60000, limit: 10 },
+      { name: 'admin', ttl: 60000, limit: 100 },
     ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -63,6 +63,7 @@ import { UsersModule } from './users/users.module';
     RealtimeModule,
     BackupModule,
     PurchasesModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [],

@@ -8,9 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
-import { CacheService } from '../cache/cache.service';
 import { ChatService } from '../chat/chat.service';
 import { StorageService } from '../storage/storage.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -20,11 +18,6 @@ import { User } from './entities/user.entity';
 import { UserMode } from './enums/user-mode.enum';
 import { ChatRequest } from '../chat/entities/chat-request.entity';
 import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
-
-const TTL_USER = 3600;
-const TTL_BLOCKED = 30;
-const TTL_PUBLIC = 30;
-const TTL_BLOCKED_LIST = 60;
 
 @Injectable()
 export class UsersService {
@@ -37,51 +30,14 @@ export class UsersService {
     private readonly chatRequestRepository: Repository<ChatRequest>,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
-    private readonly cache: CacheService,
     private readonly storage: StorageService,
   ) {}
 
-  // ── Cache key helpers ───────────────────────────────────────────────────
-
-  private userKey(id: string) {
-    return `user:${id}`;
-  }
-
-  /** Canonical: sort IDs so (A,B) and (B,A) hit the same key */
-  private blockedKey(userAId: string, userBId: string) {
-    const [a, b] = [userAId, userBId].sort();
-    return `blocked:${a}:${b}`;
-  }
-
-  private publicUsersKey(userId: string) {
-    return `public_users:${userId}`;
-  }
-
-  private blockedListKey(userId: string) {
-    return `blocked_list:${userId}`;
-  }
-
-  private async invalidateBlockCaches(
-    blockerId: string,
-    blockedId: string,
-  ): Promise<void> {
-    await this.cache.del(
-      this.blockedKey(blockerId, blockedId),
-      this.publicUsersKey(blockerId),
-      this.publicUsersKey(blockedId),
-      this.blockedListKey(blockerId),
-    );
-  }
-
   async findById(id: string): Promise<User> {
-    const cached = await this.cache.getInstance(this.userKey(id), User);
-    if (cached) return cached;
-
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    await this.cache.set(this.userKey(id), user, TTL_USER);
     return user;
   }
 
@@ -120,26 +76,13 @@ export class UsersService {
     }
 
     user.displayName = normalised;
-    const saved = await this.usersRepository.save(user);
-    // Display name change affects search results — bust user cache and public lists
-    await Promise.all([
-      this.cache.del(this.userKey(userId)),
-      this.cache.delByPattern('public_users:*'),
-    ]);
-    return saved;
+    return this.usersRepository.save(user);
   }
 
   async setMode(userId: string, mode: UserMode): Promise<User> {
     const user = await this.findById(userId);
     user.mode = mode;
-    const saved = await this.usersRepository.save(user);
-    // Mode change must be visible immediately — bust user cache and every
-    // public-user list (since this user's visibility changed for everyone).
-    await Promise.all([
-      this.cache.del(this.userKey(userId)),
-      this.cache.delByPattern('public_users:*'),
-    ]);
-    return saved;
+    return this.usersRepository.save(user);
   }
 
   async deleteAccount(userId: string): Promise<void> {
@@ -149,19 +92,10 @@ export class UsersService {
     await this.chatService.closeAllRoomsForUser(userId);
 
     await this.usersRepository.remove(user);
-    // Account deletion affects all public user lists
-    await Promise.all([
-      this.cache.del(this.userKey(userId)),
-      this.cache.delByPattern('public_users:*'),
-    ]);
   }
 
   async listPublic(currentUserId: string): Promise<User[]> {
-    const key = this.publicUsersKey(currentUserId);
-    const cached = await this.cache.get<object[]>(key);
-    if (cached) return cached.map((u) => plainToInstance(User, u));
-
-    const users = await this.usersRepository
+    return this.usersRepository
       .createQueryBuilder('user')
       .where('user.mode = :mode', { mode: UserMode.PUBLIC })
       .andWhere('user.id != :currentUserId', { currentUserId })
@@ -175,9 +109,6 @@ export class UsersService {
       )
       .orderBy('user.createdAt', 'DESC')
       .getMany();
-
-    await this.cache.set(key, users, TTL_PUBLIC);
-    return users;
   }
 
   async searchByDisplayName(
@@ -222,13 +153,7 @@ export class UsersService {
   ): Promise<User> {
     const user = await this.findById(userId);
     user.appearInSearches = appearInSearches;
-    const saved = await this.usersRepository.save(user);
-    // Search visibility change affects public user lists
-    await Promise.all([
-      this.cache.del(this.userKey(userId)),
-      this.cache.delByPattern('public_users:*'),
-    ]);
-    return saved;
+    return this.usersRepository.save(user);
   }
 
   async blockUser(blockerId: string, blockedId: string): Promise<void> {
@@ -248,7 +173,6 @@ export class UsersService {
     // Create the block
     const block = this.blocksRepository.create({ blockerId, blockedId });
     await this.blocksRepository.save(block);
-    await this.invalidateBlockCaches(blockerId, blockedId);
 
     // Close any active drawing rooms between these users
     await this.chatService.closeRoomsBetweenUsers(blockerId, blockedId);
@@ -256,29 +180,18 @@ export class UsersService {
 
   async unblockUser(blockerId: string, blockedId: string): Promise<void> {
     await this.blocksRepository.delete({ blockerId, blockedId });
-    await this.invalidateBlockCaches(blockerId, blockedId);
   }
 
   async listBlocked(blockerId: string): Promise<User[]> {
-    const key = this.blockedListKey(blockerId);
-    const cached = await this.cache.get<object[]>(key);
-    if (cached) return cached.map((u) => plainToInstance(User, u));
-
     const blocks = await this.blocksRepository.find({
       where: { blockerId },
       relations: ['blocked'],
       order: { createdAt: 'DESC' },
     });
-    const users = blocks.map((b) => b.blocked);
-    await this.cache.set(key, users, TTL_BLOCKED_LIST);
-    return users;
+    return blocks.map((b) => b.blocked);
   }
 
   async isBlocked(userAId: string, userBId: string): Promise<boolean> {
-    const key = this.blockedKey(userAId, userBId);
-    const cached = await this.cache.get<boolean>(key);
-    if (cached !== null) return cached;
-
     const count = await this.blocksRepository
       .createQueryBuilder('ub')
       .where(
@@ -286,25 +199,18 @@ export class UsersService {
         { userAId, userBId },
       )
       .getCount();
-    const result = count > 0;
-    await this.cache.set(key, result, TTL_BLOCKED);
-    return result;
+    return count > 0;
   }
 
   // ── Discovery Game ──────────────────────────────────────────────────────
 
   /**
    * Check if two users have an active chat request (PENDING or ACCEPTED).
-   * Results are cached for 30 seconds to reduce DB load.
    */
   private async hasActiveChatRequest(
     userAId: string,
     userBId: string,
   ): Promise<boolean> {
-    const cacheKey = `has_chat:${[userAId, userBId].sort().join(':')}`;
-    const cached = await this.cache.get<boolean>(cacheKey);
-    if (cached !== null) return cached;
-
     const count = await this.chatRequestRepository
       .createQueryBuilder('cr')
       .where(
@@ -316,9 +222,7 @@ export class UsersService {
       })
       .getCount();
 
-    const hasChat = count > 0;
-    await this.cache.set(cacheKey, hasChat, 30);
-    return hasChat;
+    return count > 0;
   }
 
   async setDiscoveryGame(
@@ -352,31 +256,7 @@ export class UsersService {
       user.appearInDiscoveryGame = false;
     }
 
-    const saved = await this.usersRepository.save(user);
-
-    // Discovery game state affects discovery endpoint — invalidate caches
-    if (appearInDiscoveryGame) {
-      // User joined or updated image — delete queue to force refill with fresh data
-      await this.cache.del(
-        this.userKey(userId),
-        'discovery:queue',
-        'discovery:empty',
-      );
-    } else {
-      // User exited — remove them from the queue if present
-      const queueKey = 'discovery:queue';
-      const userDto: DiscoveryUserResponseDto = {
-        id: user.id,
-        displayName: user.displayName,
-        discoveryImageUrl: user.discoveryImageUrl ?? '',
-      };
-      await Promise.all([
-        this.cache.del(this.userKey(userId), 'discovery:empty'),
-        this.cache.lrem(queueKey, 0, userDto),
-      ]);
-    }
-
-    return saved;
+    return this.usersRepository.save(user);
   }
 
   async getRandomDiscoveryUser(
@@ -390,168 +270,28 @@ export class UsersService {
       });
     }
 
-    const queueKey = 'discovery:queue';
-    const emptyKey = 'discovery:empty';
-    const lockKey = 'discovery:refill_lock';
-
-    // Check if the pool is known to be empty
-    const isEmpty = await this.cache.get<boolean>(emptyKey);
-    if (isEmpty) return null;
-
-    // Try to pop a user from the global queue
-    let maxAttempts = 10; // Prevent infinite loop if queue only has excludeUserId
-    while (maxAttempts-- > 0) {
-      const user = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
-
-      if (!user) {
-        // Queue is empty — attempt to refill it
-        return this.refillDiscoveryQueue(
-          currentUser.id,
-          queueKey,
-          emptyKey,
-          lockKey,
-        );
-      }
-
-      // Skip if the user is the requester themselves
-      if (user.id === currentUser.id) {
-        continue;
-      }
-
-      // Skip if there's already an active chat request with this user
-      const hasChat = await this.hasActiveChatRequest(currentUser.id, user.id);
-      if (hasChat) {
-        continue;
-      }
-
-      return user;
-    }
-
-    // Fallback: if queue only contains currentUser entries, refill
-    return this.refillDiscoveryQueue(
-      currentUser.id,
-      queueKey,
-      emptyKey,
-      lockKey,
-    );
-  }
-
-  /**
-   * Refill the discovery queue with a fresh shuffled list of all eligible users.
-   * Uses distributed locking to prevent race conditions when multiple requests
-   * arrive simultaneously on an empty queue.
-   */
-  private async refillDiscoveryQueue(
-    excludeUserId: string,
-    queueKey: string,
-    emptyKey: string,
-    lockKey: string,
-  ): Promise<DiscoveryUserResponseDto | null> {
-    // Try to acquire the lock (10-second TTL)
-    const lockToken = await this.cache.acquireLock(lockKey, 10);
-
-    if (!lockToken) {
-      // Another server/request is refilling — wait and retry
-      for (let i = 0; i < 3; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const user = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
-        if (!user) continue;
-
-        // Skip if it's the requester or has active chat
-        if (user.id === excludeUserId) continue;
-        const hasChat = await this.hasActiveChatRequest(excludeUserId, user.id);
-        if (hasChat) continue;
-
-        return user;
-      }
-
-      // Still empty after retries — fallback to direct DB query
-      return this.getRandomDiscoveryUserDirect(excludeUserId);
-    }
-
-    try {
-      // Lock acquired — double-check queue is still empty
-      const checkUser =
-        await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
-      if (checkUser) {
-        // Another process refilled while we were acquiring the lock
-        if (checkUser.id !== excludeUserId) {
-          const hasChat = await this.hasActiveChatRequest(
-            excludeUserId,
-            checkUser.id,
-          );
-          if (!hasChat) {
-            return checkUser;
-          }
-        }
-        // If it's the excludeUserId or has active chat, fall through to refill
-      }
-
-      // Fetch all eligible users from DB
-      const users = await this.usersRepository
-        .createQueryBuilder('user')
-        .select(['user.id', 'user.displayName', 'user.discoveryImageUrl'])
-        .where('user.appearInDiscoveryGame = :enabled', { enabled: true })
-        .andWhere('user.discoveryImageUrl IS NOT NULL')
-        .andWhere('user.id != :excludeUserId', { excludeUserId })
-        .getMany();
-
-      if (users.length === 0) {
-        // No eligible users — cache this fact to avoid repeated queries
-        await this.cache.set(emptyKey, true, 60);
-        return null;
-      }
-
-      // Shuffle the array using Fisher-Yates algorithm
-      for (let i = users.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [users[i], users[j]] = [users[j], users[i]];
-      }
-
-      // Convert to DTOs
-      const dtos: DiscoveryUserResponseDto[] = users.map((u) => ({
-        id: u.id,
-        displayName: u.displayName,
-        discoveryImageUrl: u.discoveryImageUrl!,
-      }));
-
-      // Push all users to the queue
-      await this.cache.rpush(queueKey, ...dtos);
-
-      // Set 1-hour TTL on the queue so it auto-refreshes
-      await this.cache.expire(queueKey, 3600);
-
-      // Pop and return the first user
-      const result = await this.cache.lpop<DiscoveryUserResponseDto>(queueKey);
-      if (result && result.id !== excludeUserId) {
-        const hasChat = await this.hasActiveChatRequest(
-          excludeUserId,
-          result.id,
-        );
-        if (!hasChat) {
-          return result;
-        }
-      }
-      return null;
-    } finally {
-      // Always release the lock
-      await this.cache.releaseLock(lockKey, lockToken);
-    }
-  }
-
-  /**
-   * Fallback method: query DB directly for a random discovery user.
-   * Used when lock contention is too high or queue operations fail.
-   */
-  private async getRandomDiscoveryUserDirect(
-    excludeUserId: string,
-  ): Promise<DiscoveryUserResponseDto | null> {
+    // Query DB directly for a random discovery user, excluding current user
+    // and users with whom there's already an active chat request
     const users = await this.usersRepository
       .createQueryBuilder('user')
       .select(['user.id', 'user.displayName', 'user.discoveryImageUrl'])
       .where('user.appearInDiscoveryGame = :enabled', { enabled: true })
       .andWhere('user.discoveryImageUrl IS NOT NULL')
-      .andWhere('user.id != :excludeUserId', { excludeUserId })
+      .andWhere('user.id != :excludeUserId', { excludeUserId: currentUser.id })
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM chat_requests cr
+          WHERE cr.status IN (:...statuses)
+            AND (
+              (cr.fromUserId = :currentUserId AND cr.toUserId = user.id)
+              OR (cr.fromUserId = user.id AND cr.toUserId = :currentUserId)
+            )
+        )`,
+        {
+          statuses: [ChatRequestStatus.PENDING, ChatRequestStatus.ACCEPTED],
+          currentUserId: currentUser.id,
+        },
+      )
       .orderBy('RAND()')
       .limit(1)
       .getMany();

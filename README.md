@@ -50,4 +50,5 @@ yarn start:dev
 ## Redis and queue guidance
 
 - Queue: not needed for current MVP.
-- Redis: optional now, recommended when running multiple backend instances (set `REDIS_URL` to enable Socket.IO adapter).
+- Redis: **Caching has been removed** from the application to simplify operations and eliminate cache invalidation bugs. The Socket.IO Redis adapter for horizontal scaling can still be enabled if needed by setting `REDIS_URL` (see [realtime.module.ts](src/realtime/realtime.module.ts)).
+- The CacheModule and CacheService remain in the codebase but are not currently used. You can re-enable caching for specific hot endpoints if needed in the future.

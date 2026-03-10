@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { CacheService } from '../cache/cache.service';
 import { ChatService } from '../chat/chat.service';
 import { ChatRequest } from '../chat/entities/chat-request.entity';
 import { ChatRequestStatus } from '../chat/enums/chat-request-status.enum';
@@ -45,16 +44,6 @@ const repoMock = () => ({
   createQueryBuilder: jest.fn(),
 });
 
-const cacheMock = (): jest.Mocked<
-  Pick<CacheService, 'get' | 'getInstance' | 'set' | 'del' | 'delByPattern'>
-> => ({
-  get: jest.fn().mockResolvedValue(null),
-  getInstance: jest.fn().mockResolvedValue(null),
-  set: jest.fn().mockResolvedValue(undefined),
-  del: jest.fn().mockResolvedValue(undefined),
-  delByPattern: jest.fn().mockResolvedValue(undefined),
-});
-
 const chatServiceMock = (): jest.Mocked<
   Pick<ChatService, 'closeRoomsBetweenUsers' | 'closeAllRoomsForUser'>
 > => ({
@@ -73,7 +62,6 @@ describe('UsersService', () => {
   let usersRepo: ReturnType<typeof repoMock>;
   let blocksRepo: ReturnType<typeof repoMock>;
   let chatRequestRepo: ReturnType<typeof repoMock>;
-  let cache: ReturnType<typeof cacheMock>;
   let chatService: ReturnType<typeof chatServiceMock>;
   let storage: ReturnType<typeof storageMock>;
 
@@ -81,7 +69,6 @@ describe('UsersService', () => {
     usersRepo = repoMock();
     blocksRepo = repoMock();
     chatRequestRepo = repoMock();
-    cache = cacheMock();
     chatService = chatServiceMock();
     storage = storageMock();
 
@@ -92,7 +79,6 @@ describe('UsersService', () => {
         { provide: getRepositoryToken(UserBlock), useValue: blocksRepo },
         { provide: getRepositoryToken(ChatRequest), useValue: chatRequestRepo },
         { provide: ChatService, useValue: chatService },
-        { provide: CacheService, useValue: cache },
         { provide: StorageService, useValue: storage },
       ],
     }).compile();
@@ -266,16 +252,6 @@ describe('UsersService', () => {
         expect.objectContaining({ appearInSearches: true }),
       );
       expect(result.appearInSearches).toBe(true);
-    });
-
-    it('invalidates the user cache entry', async () => {
-      const user = makeUser();
-      usersRepo.findOne.mockResolvedValue(user);
-      usersRepo.save.mockResolvedValue(user);
-
-      await service.setAppearInSearches('user-1', false);
-
-      expect(cache.del).toHaveBeenCalledWith('user:user-1');
     });
 
     it('throws NotFoundException when user does not exist', async () => {

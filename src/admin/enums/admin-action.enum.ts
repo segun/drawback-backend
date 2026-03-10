@@ -1,0 +1,6 @@
+export enum AdminAction {
+  BAN_USER = 'BAN_USER',
+  UNBAN_USER = 'UNBAN_USER',
+  RESET_PASSWORD = 'RESET_PASSWORD',
+  UPDATE_ROLE = 'UPDATE_ROLE',
+}

@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserMode } from '../enums/user-mode.enum';
+import { UserRole } from '../enums/user-role.enum';
 
 @Entity('users')
 export class User {
@@ -53,6 +54,21 @@ export class User {
   @Column({ default: false })
   @Transform(({ value }) => Boolean(value))
   hasDiscoveryAccess!: boolean;
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  role!: UserRole;
+
+  @Column({ default: false })
+  @Transform(({ value }) => Boolean(value))
+  isBlocked!: boolean;
+
+  @Exclude()
+  @Column({ type: 'datetime', nullable: true })
+  blockedAt!: Date | null;
+
+  @Exclude()
+  @Column({ type: 'varchar', nullable: true, length: 500 })
+  blockedReason!: string | null;
 
   @Exclude()
   @Column({ type: 'varchar', nullable: true, length: 128 })

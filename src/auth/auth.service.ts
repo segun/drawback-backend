@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
   forwardRef,
@@ -239,10 +240,15 @@ export class AuthService {
       );
     }
 
+    if (user.isBlocked) {
+      throw new ForbiddenException('Account has been blocked');
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       displayName: user.displayName,
+      role: user.role as string,
     };
 
     const accessToken = this.jwtService.sign(payload);

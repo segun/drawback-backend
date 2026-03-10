@@ -25,7 +25,6 @@ import { UsersModule } from './../src/users/users.module';
 import { SavedChat } from './../src/chat/entities/saved-chat.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { DrawGateway } from './../src/realtime/draw.gateway';
-import { CacheModule } from './../src/cache/cache.module';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashed'),
@@ -150,7 +149,6 @@ const gatewayMock = {
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ name: 'auth', ttl: 60000, limit: 100 }]),
-    CacheModule,
     AuthModule,
     UsersModule,
     ChatModule,

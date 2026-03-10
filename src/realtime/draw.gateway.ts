@@ -183,6 +183,20 @@ export class DrawGateway
       return;
     }
 
+    // Check if user is blocked
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      client.emit('error', { message: 'User not found' });
+      client.disconnect();
+      return;
+    }
+
+    if (user.isBlocked) {
+      client.emit('error', { message: 'Account has been blocked' });
+      client.disconnect();
+      return;
+    }
+
     this.socketToUser.set(client.id, userId);
 
     // Persist user→socket and socket→user mappings in Redis (shared across all processes/workers).
