@@ -48,6 +48,24 @@ jobs:
       MAIL_USER: ""
       MAIL_PASS: ""
       MAIL_FROM: noreply@drawback.chat
+      CLOUDFLARE_R2_ACCOUNT_ID: test-account-id
+      CLOUDFLARE_R2_ACCESS_KEY: test-access-key
+      CLOUDFLARE_R2_SECRET_KEY: test-secret-key
+      CLOUDFLARE_R2_BUCKET: test-bucket
+      CLOUDFLARE_R2_REGION: auto
+      CLOUDFLARE_R2_PUBLIC_BASE_URL: https://test-bucket.r2.cloudflarestorage.com
+      MONGO_URI: mongodb://localhost:27017/drawback_backups
+      MONGO_DB_NAME: drawback_backups
+      MONGO_BACKUP_COLLECTION: drawback_backup_metadata
+      MONGO_BACKUP_BUCKET: drawback_backup_files
+      BACKUP_PERIODIC_ENABLED: "false"
+      BACKUP_SCHEDULE: "0 0 * * *"
+      BACKUP_RETENTION_DAYS: 30
+      BACKUP_TIMEZONE: "UTC"
+      BACKUP_WRITE_TRIGGER_ENABLED: "true"
+      BACKUP_WRITE_DEBOUNCE_SECONDS: "60"
+      MYSQLDUMP_BIN: /usr/bin/mysqldump
+      MYSQL_BIN: /usr/bin/mysql
 
     steps:
       - name: Checkout code
