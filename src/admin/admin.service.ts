@@ -179,6 +179,7 @@ export class AdminService {
           AuthService.RESET_TOKEN_TTL_HOURS,
         );
         emailsSent++;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         failed.push(user.id);
       }

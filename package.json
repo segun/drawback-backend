@@ -24,6 +24,7 @@
     "migration:revert": "yarn typeorm migration:revert",
     "migration:show": "yarn typeorm migration:show",
     "db:reset": "yarn typeorm schema:drop",
+    "add:admin": "TS_NODE_PROJECT=tsconfig.json ts-node src/cli/add-admin.ts",
     "backup:list": "TS_NODE_PROJECT=tsconfig.json ts-node src/backup/cli.ts list",
     "backup:restore": "TS_NODE_PROJECT=tsconfig.json ts-node src/backup/cli.ts restore"
   },

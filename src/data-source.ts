@@ -4,6 +4,7 @@ import { User } from './users/entities/user.entity';
 import { UserBlock } from './users/entities/user-block.entity';
 import { ChatRequest } from './chat/entities/chat-request.entity';
 import { SavedChat } from './chat/entities/saved-chat.entity';
+import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -18,7 +19,7 @@ export default new DataSource({
   username: required('DB_USER'),
   password: required('DB_PASSWORD'),
   database: required('DB_NAME'),
-  entities: [User, UserBlock, ChatRequest, SavedChat],
+  entities: [User, UserBlock, ChatRequest, SavedChat, AdminAuditLog],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,
 });

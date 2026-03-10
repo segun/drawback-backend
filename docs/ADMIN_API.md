@@ -11,12 +11,138 @@ All admin endpoints require:
 1. Valid JWT token with `role: "ADMIN"` in the payload
 2. Authorization header: `Authorization: Bearer <adminToken>`
 
-**Creating an admin user:**
+### How the Frontend Detects Admin Status
+
+The frontend can determine if a user is an admin using **two methods**:
+
+#### Method 1: Decode the JWT Token (Client-Side)
+
+The JWT token received from `/api/auth/login` contains the `role` field in its payload. Since JWTs are base64-encoded (not encrypted), you can decode them client-side:
+
+```typescript
+// After successful login
+const { accessToken } = await loginResponse.json();
+
+// Decode JWT (only splits and decodes, doesn't verify signature)
+function decodeJWT(token: string) {
+  const base64Url = token.split('.')[1];
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const jsonPayload = decodeURIComponent(
+    atob(base64)
+      .split('')
+      .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+      .join('')
+  );
+  return JSON.parse(jsonPayload);
+}
+
+const payload = decodeJWT(accessToken);
+const isAdmin = payload.role === 'ADMIN';
+
+// Or use a library like jwt-decode
+import jwtDecode from 'jwt-decode';
+const payload = jwtDecode<{ sub: string; email: string; role: string }>(accessToken);
+const isAdmin = payload.role === 'ADMIN';
+```
+
+**JWT Payload Structure:**
+```json
+{
+  "sub": "user-uuid",
+  "email": "admin@example.com",
+  "displayName": "@admin",
+  "role": "ADMIN",
+  "iat": 1709971200,
+  "exp": 1709974800
+}
+```
+
+#### Method 2: Call GET /api/users/me
+
+The current user endpoint returns the full user profile including the `role` field:
+
+```typescript
+const response = await fetch('/api/users/me', {
+  headers: { 'Authorization': `Bearer ${accessToken}` }
+});
+const user = await response.json();
+const isAdmin = user.role === 'ADMIN';
+```
+
+**Response from /api/users/me:**
+```json
+{
+  "id": "uuid",
+  "email": "admin@example.com",
+  "displayName": "@admin",
+  "role": "ADMIN",
+  "mode": "PUBLIC",
+  "isActivated": true,
+  "isBlocked": false,
+  "appearInSearches": true,
+  "appearInDiscoveryGame": false,
+  "hasDiscoveryAccess": false,
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-01T10:00:00.000Z"
+}
+```
+
+**Recommendation:** Use **Method 1** (decode JWT) for immediate admin detection without an extra API call. Use **Method 2** if you need to refresh user data or don't want to handle JWT decoding.
+
+---
+
+### Creating an Admin User
+
+You can create admin users using **two methods**:
+
+#### Method 1: Using the CLI Script (Recommended)
+
+Add admin credentials to your `.env` file:
+
+```bash
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your-secure-password
+```
+
+Then run:
+
+```bash
+yarn add:admin
+```
+
+**What the script does:**
+- Reads `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env`
+- Creates a new user with `role: ADMIN` if the email doesn't exist
+- Or updates an existing user's role to `ADMIN` if they already exist
+- Automatically activates the account
+- Displays success message with user details
+
+**Output example:**
+```
+🔌 Connecting to database...
+👤 User not found. Creating new admin user...
+✅ Admin user created successfully
+   Email: admin@example.com
+   Display Name: admin
+   Role: ADMIN
+
+✨ Done! You can now log in with admin credentials.
+```
+
+#### Method 2: Manual Database Update
+
+Update an existing user via SQL:
+
 ```sql
 UPDATE users SET role = 'ADMIN' WHERE email = 'admin@example.com';
 ```
 
-**Error responses for non-admin users:**
+The user must log out and log back in for the new role to be included in their JWT.
+
+---
+
+### Error Responses for Non-Admin Users
+
 | Status | Reason |
 |---|---|
 | `401` | No token or invalid token |
@@ -86,16 +212,19 @@ Filter users by various criteria with pagination.
 | `page` | number | yes | Page number (default: 1) |
 | `limit` | number | yes | Items per page (default: 100, max: 500) |
 | `mode` | string | yes | `PUBLIC` or `PRIVATE` |
-| `appearInSearches` | boolean | yes | Filter by search visibility |
-| `appearInDiscoveryGame` | boolean | yes | Filter by discovery game participation |
-| `isBlocked` | boolean | yes | Filter by blocked status |
-| `isActivated` | boolean | yes | Filter by activation status |
+| `appearInSearches` | boolean | yes | Filter by search visibility (`true` or `false`) |
+| `appearInDiscoveryGame` | boolean | yes | Filter by discovery game participation (`true` or `false`) |
+| `isBlocked` | boolean | yes | Filter by blocked status (`true` or `false`) |
+| `isActivated` | boolean | yes | Filter by activation status (`true` or `false`) |
+
+> **Note:** Boolean parameters must be passed as string values `true` or `false` in the URL.
 
 **Request Examples**
 ```
 GET /api/admin/users/filter?mode=PRIVATE&page=1&limit=20
 GET /api/admin/users/filter?isBlocked=true
 GET /api/admin/users/filter?appearInDiscoveryGame=true&isActivated=true
+GET /api/admin/users/filter?mode=PRIVATE&appearInSearches=false
 ```
 
 **Response `200`**

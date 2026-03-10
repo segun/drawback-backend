@@ -299,6 +299,7 @@ describe('Drawback API (e2e)', () => {
     });
 
     it('GET /users/public → returns list of public users', async () => {
+      usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
       usersRepo.createQueryBuilder.mockReturnValueOnce(qbMock(0, [bob]));
 
       const res = await request(app.getHttpServer())
@@ -310,6 +311,7 @@ describe('Drawback API (e2e)', () => {
     });
 
     it('GET /users/search?q=bob → returns matching users', async () => {
+      usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
       usersRepo.createQueryBuilder.mockReturnValueOnce(qbMock(0, [bob]));
 
       const res = await request(app.getHttpServer())
@@ -361,6 +363,7 @@ describe('Drawback API (e2e)', () => {
     });
 
     it('GET /chat/requests/sent → returns sent requests list', async () => {
+      usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
       chatRepo.find.mockResolvedValueOnce([pendingRequest]);
 
       const res = await request(app.getHttpServer())
@@ -372,6 +375,7 @@ describe('Drawback API (e2e)', () => {
     });
 
     it('GET /chat/requests/received → returns received requests list', async () => {
+      usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
       chatRepo.find.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())

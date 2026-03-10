@@ -57,7 +57,10 @@ export class AdminController {
   }
 
   @Post('users/reset-passwords')
-  resetPasswords(@CurrentUser() admin: User, @Body() dto: ResetUserPasswordsDto) {
+  resetPasswords(
+    @CurrentUser() admin: User,
+    @Body() dto: ResetUserPasswordsDto,
+  ) {
     return this.adminService.resetUserPasswords(admin, dto.userIds);
   }
 }

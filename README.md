@@ -25,6 +25,31 @@ yarn install
 yarn start:dev
 ```
 
+## Admin Setup
+
+To create an admin user:
+
+1. Add credentials to `.env`:
+```bash
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your-secure-password
+```
+
+2. Run the CLI script:
+```bash
+yarn add:admin
+```
+
+This creates a new admin user or promotes an existing user to admin role. See [docs/ADMIN_API.md](docs/ADMIN_API.md) for the full admin API reference.
+
+## Database Migrations
+
+```bash
+yarn migration:generate src/migrations/MigrationName  # Generate migration
+yarn migration:run                                     # Apply migrations
+yarn migration:revert                                  # Rollback last migration
+```
+
 ## REST API
 
 - `POST /users/register` body: `{ number, name? }`
