@@ -62,6 +62,14 @@ export class User {
   @Column({ type: 'datetime', nullable: true })
   resetTokenExpiry!: Date | null;
 
+  @Exclude()
+  @Column({ type: 'varchar', nullable: true, length: 128 })
+  deleteToken!: string | null;
+
+  @Exclude()
+  @Column({ type: 'datetime', nullable: true })
+  deleteTokenExpiry!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

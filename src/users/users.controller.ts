@@ -15,6 +15,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthService } from '../auth/auth.service';
 import { User } from './entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SetUserModeDto } from './dto/set-user-mode.dto';
@@ -26,7 +27,10 @@ import { UsersService } from './users.service';
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get('me')
   getMe(@CurrentUser() user: User) {
@@ -64,9 +68,8 @@ export class UsersController {
   }
 
   @Delete('me')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteMe(@CurrentUser() user: User) {
-    await this.usersService.deleteAccount(user.id);
+  async deleteMe(@CurrentUser() user: User): Promise<{ message: string }> {
+    return this.authService.requestAccountDeletion(user.id);
   }
 
   @Get('public')

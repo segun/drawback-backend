@@ -52,6 +52,32 @@ export class AuthController {
     };
   }
 
+  @Get('confirm-delete/:token')
+  @Redirect()
+  async confirmDelete(@Param('token') token: string) {
+    const frontendUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const base = `${frontendUrl}/delete-my-account`;
+    const result = await this.authService.confirmDelete(token);
+
+    if (result.success) {
+      const message = encodeURIComponent(
+        'Your account has been successfully deleted',
+      );
+      return {
+        url: `${base}?status=success&message=${message}`,
+        statusCode: 302,
+      };
+    }
+
+    const message = encodeURIComponent(
+      String(result.reason ?? 'Account deletion failed'),
+    );
+    return {
+      url: `${base}?status=fail&message=${message}`,
+      statusCode: 302,
+    };
+  }
+
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @Post('resend-confirmation')
   resendConfirmation(
@@ -64,6 +90,12 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
+  @Post('login-and-delete')
+  loginAndDelete(@Body() dto: LoginDto): Promise<{ message: string }> {
+    return this.authService.loginAndDelete(dto);
   }
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })

@@ -248,4 +248,84 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     return { accessToken };
   }
+
+  /** How long (hours) a delete-account token remains valid. */
+  static readonly DELETE_TOKEN_TTL_HOURS = 24;
+
+  async requestAccountDeletion(userId: string): Promise<{ message: string }> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Generate deletion token and send email
+    const token = randomUUID();
+    const expiryMs = AuthService.DELETE_TOKEN_TTL_HOURS * 60 * 60 * 1000;
+    user.deleteToken = token;
+    user.deleteTokenExpiry = new Date(Date.now() + expiryMs);
+    await this.usersRepository.save(user);
+
+    await this.mailService.sendAccountDeletionEmail(
+      user.email,
+      token,
+      user.displayName,
+      AuthService.DELETE_TOKEN_TTL_HOURS,
+    );
+
+    return {
+      message:
+        'We have sent you an email with instructions to confirm account deletion. Please check your inbox. If you do not receive the email within a few minutes, please check your spam folder.',
+    };
+  }
+
+  async loginAndDelete(dto: LoginDto): Promise<{ message: string }> {
+    const user = await this.usersRepository.findOne({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Use the shared method to request deletion
+    return this.requestAccountDeletion(user.id);
+  }
+
+  async confirmDelete(
+    token: string,
+  ): Promise<{ success: boolean; email: string | null; reason?: string }> {
+    const user = await this.usersRepository.findOne({
+      where: { deleteToken: token },
+    });
+
+    if (!user || !user.deleteToken || !user.deleteTokenExpiry) {
+      return {
+        success: false,
+        email: null,
+        reason: 'Invalid or expired deletion token',
+      };
+    }
+
+    if (user.deleteTokenExpiry < new Date()) {
+      return {
+        success: false,
+        email: user.email,
+        reason: 'Deletion token has expired',
+      };
+    }
+
+    // Delete the account
+    const userEmail = user.email;
+    await this.usersService.deleteAccount(user.id);
+
+    return { success: true, email: userEmail };
+  }
 }

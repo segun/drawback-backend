@@ -139,4 +139,50 @@ export class MailService {
       throw err;
     }
   }
+
+  async sendAccountDeletionEmail(
+    email: string,
+    token: string,
+    displayName: string,
+    expiresInHours: number,
+  ): Promise<void> {
+    const backendUrl = this.config.getOrThrow<string>('APP_URL');
+    const deleteUrl = `${backendUrl}/api/auth/confirm-delete/${token}`;
+    const { appName, supportEmail, logoUrl } = this;
+
+    const templatePath = path.join(
+      __dirname,
+      '..',
+      'auth',
+      'public',
+      'delete-account.html',
+    );
+
+    const html = this.renderTemplate(templatePath, {
+      appName,
+      logoUrl,
+      displayName,
+      email,
+      deleteUrl,
+      expiresInHours: String(expiresInHours),
+      supportEmail,
+      year: new Date().getFullYear().toString(),
+    });
+
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email,
+        subject: `${appName} — account deletion confirmation`,
+        text: `Hi ${displayName}, click the link to confirm account deletion: ${deleteUrl} (expires in ${expiresInHours} hour${expiresInHours === 1 ? '' : 's'})`,
+        html,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send account deletion email to ${email}`,
+        err,
+      );
+      throw err;
+    }
+  }
 }
