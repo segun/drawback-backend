@@ -49,8 +49,8 @@ jobs:
       MAIL_PASS: ""
       MAIL_FROM: noreply@drawback.chat
       CLOUDFLARE_R2_ACCOUNT_ID: test-account-id
-      CLOUDFLARE_R2_ACCESS_KEY: test-access-key
-      CLOUDFLARE_R2_SECRET_KEY: test-secret-key
+      CLOUDFLARE_R2_ACCESS_KEY_ID: test-access
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY: test-access-key
       CLOUDFLARE_R2_BUCKET: test-bucket
       CLOUDFLARE_R2_REGION: auto
       CLOUDFLARE_R2_PUBLIC_BASE_URL: https://test-bucket.r2.cloudflarestorage.com
