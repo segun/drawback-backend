@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 import { User } from '../../users/entities/user.entity';
 import { ReportType } from '../enums/report-type.enum';
 import { ReportStatus } from '../enums/report-status.enum';
@@ -54,20 +54,16 @@ export class Report {
   status!: ReportStatus;
 
   @Column('text', { nullable: true })
-  @Exclude()
   adminNotes?: string;
 
   @Column('uuid', { nullable: true })
-  @Exclude()
   resolvedBy?: string;
 
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'resolvedBy' })
-  @Exclude()
   resolver?: User;
 
   @Column({ type: 'timestamp', nullable: true })
-  @Exclude()
   resolvedAt?: Date;
 
   @CreateDateColumn()

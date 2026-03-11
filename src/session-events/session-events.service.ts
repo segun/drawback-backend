@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SessionEvent } from './entities/session-event.entity';
+import { User } from '../users/entities/user.entity';
 import { SessionEventType } from './enums/session-event-type.enum';
 import { SessionEventFiltersDto } from './dto/session-event-filters.dto';
 
@@ -13,6 +14,8 @@ export class SessionEventsService {
   constructor(
     @InjectRepository(SessionEvent)
     private readonly sessionEventRepository: Repository<SessionEvent>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async logEvent(
@@ -42,20 +45,54 @@ export class SessionEventsService {
   ): Promise<{ events: SessionEvent[]; total: number }> {
     const queryBuilder = this.sessionEventRepository
       .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
       .orderBy('event.createdAt', 'DESC')
       .take(limit)
       .skip(offset);
 
-    if (filters.userId) {
-      queryBuilder.andWhere('event.userId = :userId', {
-        userId: filters.userId,
+    // Resolve user by displayName or email
+    if (filters.user) {
+      const user = await this.userRepository.findOne({
+        where: [
+          { displayName: filters.user.toLowerCase() },
+          { email: filters.user.toLowerCase() },
+        ],
       });
+      if (user) {
+        queryBuilder.andWhere('event.userId = :userId', {
+          userId: user.id,
+        });
+      } else {
+        // Return empty result if user not found
+        return { events: [], total: 0 };
+      }
     }
 
     if (filters.eventType) {
       queryBuilder.andWhere('event.eventType = :eventType', {
         eventType: filters.eventType,
       });
+    }
+
+    if (filters.socketId) {
+      queryBuilder.andWhere(
+        "JSON_EXTRACT(event.metadata, '$.socketId') = :socketId",
+        { socketId: filters.socketId },
+      );
+    }
+
+    if (filters.roomId) {
+      queryBuilder.andWhere(
+        "JSON_EXTRACT(event.metadata, '$.roomId') = :roomId",
+        { roomId: filters.roomId },
+      );
+    }
+
+    if (filters.requestId) {
+      queryBuilder.andWhere(
+        "JSON_EXTRACT(event.metadata, '$.requestId') = :requestId",
+        { requestId: filters.requestId },
+      );
     }
 
     if (filters.startDate) {

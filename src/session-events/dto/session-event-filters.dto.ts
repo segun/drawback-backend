@@ -1,14 +1,26 @@
-import { IsEnum, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsDateString } from 'class-validator';
 import { SessionEventType } from '../enums/session-event-type.enum';
 
 export class SessionEventFiltersDto {
-  @IsUUID()
+  @IsString()
   @IsOptional()
-  userId?: string;
+  user?: string;
 
   @IsEnum(SessionEventType)
   @IsOptional()
   eventType?: SessionEventType;
+
+  @IsString()
+  @IsOptional()
+  socketId?: string;
+
+  @IsString()
+  @IsOptional()
+  roomId?: string;
+
+  @IsString()
+  @IsOptional()
+  requestId?: string;
 
   @IsDateString()
   @IsOptional()

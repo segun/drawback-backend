@@ -770,12 +770,14 @@ List all abuse reports with optional filtering.
 |-------|------|----------|-------------|
 | `status` | string | yes | `PENDING`, `UNDER_REVIEW`, `RESOLVED`, `DISMISSED` |
 | `reportType` | string | yes | `CSAE`, `HARASSMENT`, `INAPPROPRIATE_CONTENT`, `SPAM`, `IMPERSONATION`, `OTHER` |
-| `reportedUserId` | UUID | yes | Filter by reported user |
-| `reporterId` | UUID | yes | Filter by reporter |
+| `reportedUser` | string | yes | Filter by reported user's displayName or email |
+| `reporter` | string | yes | Filter by reporter's displayName or email |
 
 **Request**
 ```
 GET /api/reports/admin?status=PENDING&reportType=CSAE
+GET /api/reports/admin?reportedUser=@badactor
+GET /api/reports/admin?reporter=victim@example.com
 Authorization: Bearer <adminToken>
 ```
 
@@ -871,14 +873,17 @@ Query historical connection and chat session events (30-day retention).
 **Query Parameters**
 | Param | Type | Optional | Description |
 |-------|------|----------|-------------|
-| `userId` | UUID | yes | Filter by user |
+| `user` | string | yes | Filter by user's displayName or email |
 | `eventType` | string | yes | `CONNECT`, `DISCONNECT`, `CHAT_JOINED`, `CHAT_LEFT` |
+| `socketId` | string | yes | Filter by specific socket ID |
 | `startDate` | ISO date | yes | Filter from date |
 | `endDate` | ISO date | yes | Filter to date |
 
 **Request**
 ```
-GET /api/admin/session-events?userId=abc123&startDate=2026-03-01
+GET /api/admin/session-events?user=@badactor&startDate=2026-03-01
+GET /api/admin/session-events?user=user@example.com&eventType=CONNECT
+GET /api/admin/session-events?socketId=xyz123&eventType=CHAT_JOINED
 Authorization: Bearer <adminToken>
 ```
 
@@ -887,6 +892,11 @@ Authorization: Bearer <adminToken>
 [{
   "id": "uuid",
   "userId": "uuid",
+  "user": {
+    "id": "uuid",
+    "displayName": "@username",
+    "email": "user@example.com"
+  },
   "eventType": "CONNECT",
   "ipAddress": "192.168.1.1",
   "metadata": { 
@@ -986,19 +996,19 @@ const reports = await fetch(
   { headers }
 ).then(r => r.json());
 
-const report = reports[0];
-
-// 2. Get session events for reported user around report time
-const reportDate = new Date(report.createdAt);
-const startDate = new Date(reportDate.getTime() - 24*60*60*1000).toISOString();
-const events = await fetch(
-  `/api/admin/session-events?userId=${report.reportedUserId}&startDate=${startDate}`,
+const report = reports[0];=${report.reportedUser.displayName}&startDate=${startDate}`,
   { headers }
 ).then(r => r.json());
 
 // 3. Check if users were in same room
 const reporterEvents = await fetch(
-  `/api/admin/session-events?userId=${report.reporterId}&startDate=${startDate}`,
+  `/api/admin/session-events?user=${report.reporter.displayNamer.id}&startDate=${startDate}`,
+  { headers }
+).then(r => r.json());
+
+// 3. Check if users were in same room
+const reporterEvents = await fetch(
+  `/api/admin/session-events?userId=${report.reporter.id}&startDate=${startDate}`,
   { headers }
 ).then(r => r.json());
 
@@ -1018,12 +1028,12 @@ await fetch(`/api/reports/admin/${report.id}`, {
   })
 });
 
-// 5. Ban the user
+// 5. Ban the user (using reportedUser.id from the report response)
 await fetch('/api/admin/users/ban', {
   method: 'POST',
   headers,
   body: JSON.stringify({
-    userIds: [report.reportedUserId],
+    userIds: [report.reportedUser.id],
     reason: `CSAE violation - Report #${report.id}`
   })
 });

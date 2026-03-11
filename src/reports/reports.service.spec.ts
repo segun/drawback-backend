@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { Report } from './entities/report.entity';
+import { User } from '../users/entities/user.entity';
 import { ReportType } from './enums/report-type.enum';
 import { ReportStatus } from './enums/report-status.enum';
 
@@ -32,19 +33,23 @@ const repoMock = () => ({
 describe('ReportsService', () => {
   let service: ReportsService;
   let reportRepo: ReturnType<typeof repoMock>;
+  let userRepo: ReturnType<typeof repoMock>;
 
   beforeEach(async () => {
     reportRepo = repoMock();
+    userRepo = repoMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReportsService,
         { provide: getRepositoryToken(Report), useValue: reportRepo },
+        { provide: getRepositoryToken(User), useValue: userRepo },
       ],
     }).compile();
 
     service = module.get(ReportsService);
     reportRepo = module.get(getRepositoryToken(Report));
+    userRepo = module.get(getRepositoryToken(User));
   });
 
   afterEach(() => jest.clearAllMocks());

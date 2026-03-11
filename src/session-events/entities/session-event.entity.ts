@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { User } from '../../users/entities/user.entity';
 import { SessionEventType } from '../enums/session-event-type.enum';
 
 @Entity('session_events')
@@ -15,6 +18,10 @@ export class SessionEvent {
   @Column('uuid')
   @Index('IDX_session_events_userId')
   userId!: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user!: User;
 
   @Column({
     type: 'enum',

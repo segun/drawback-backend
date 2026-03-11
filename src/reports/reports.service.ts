@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Report } from './entities/report.entity';
+import { User } from '../users/entities/user.entity';
 import { CreateReportDto } from './dto/create-report.dto';
 import { UpdateReportStatusDto } from './dto/update-report-status.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
@@ -16,6 +17,8 @@ export class ReportsService {
   constructor(
     @InjectRepository(Report)
     private readonly reportRepository: Repository<Report>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async createReport(
@@ -55,16 +58,40 @@ export class ReportsService {
       });
     }
 
-    if (filters?.reportedUserId) {
-      queryBuilder.andWhere('report.reportedUserId = :reportedUserId', {
-        reportedUserId: filters.reportedUserId,
+    // Resolve reportedUser by displayName or email
+    if (filters?.reportedUser) {
+      const user = await this.userRepository.findOne({
+        where: [
+          { displayName: filters.reportedUser.toLowerCase() },
+          { email: filters.reportedUser.toLowerCase() },
+        ],
       });
+      if (user) {
+        queryBuilder.andWhere('report.reportedUserId = :reportedUserId', {
+          reportedUserId: user.id,
+        });
+      } else {
+        // Return empty array if user not found
+        return [];
+      }
     }
 
-    if (filters?.reporterId) {
-      queryBuilder.andWhere('report.reporterId = :reporterId', {
-        reporterId: filters.reporterId,
+    // Resolve reporter by displayName or email
+    if (filters?.reporter) {
+      const user = await this.userRepository.findOne({
+        where: [
+          { displayName: filters.reporter.toLowerCase() },
+          { email: filters.reporter.toLowerCase() },
+        ],
       });
+      if (user) {
+        queryBuilder.andWhere('report.reporterId = :reporterId', {
+          reporterId: user.id,
+        });
+      } else {
+        // Return empty array if user not found
+        return [];
+      }
     }
 
     return await queryBuilder.getMany();
