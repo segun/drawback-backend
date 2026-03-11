@@ -39,6 +39,9 @@ const CLEAR_RATE_WINDOW_MS = 5_000;
 const STROKE_RATE_LIMIT = 120;
 const STROKE_RATE_WINDOW_MS = 1_000;
 
+/** TTL for socket metadata keys in Redis (24 hours in seconds). */
+const SOCKET_META_TTL_SECONDS = 24 * 60 * 60;
+
 /** Redis key prefix for the user→socketId mapping shared across all workers. */
 const USER_SOCKET_KEY = 'drawback:user-socket';
 
@@ -213,11 +216,12 @@ export class DrawGateway
     const connectedAt = new Date().toISOString();
 
     // Persist user→socket, socket→user mappings, and socket metadata in Redis
+    const metaKey = `${SOCKET_META_KEY_PREFIX}:${client.id}`;
     await Promise.all([
       this.redisClient.hset(USER_SOCKET_KEY, userId, client.id),
       this.redisClient.set(`${SOCKET_USER_KEY_PREFIX}:${client.id}`, userId),
       this.redisClient.hset(
-        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
+        metaKey,
         'userId',
         userId,
         'socketId',
@@ -231,6 +235,7 @@ export class DrawGateway
         'currentRoom',
         '', // Initially not in any room
       ),
+      this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
     ]);
 
     this.logger.debug(`Socket connected: ${client.id} for user ${userId}`);
@@ -352,12 +357,12 @@ export class DrawGateway
       await client.join(roomId);
       this.socketToRoom.set(client.id, roomId);
 
-      // Update currentRoom in Redis metadata
-      await this.redisClient.hset(
-        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
-        'currentRoom',
-        roomId,
-      );
+      // Update currentRoom in Redis metadata and refresh TTL
+      const metaKey = `${SOCKET_META_KEY_PREFIX}:${client.id}`;
+      await Promise.all([
+        this.redisClient.hset(metaKey, 'currentRoom', roomId),
+        this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
+      ]);
 
       // Collect user IDs of peers already in the room so the joining client
       // receives presence info immediately, without waiting for a separate
@@ -417,12 +422,12 @@ export class DrawGateway
       await client.leave(room);
       this.socketToRoom.delete(client.id);
 
-      // Clear currentRoom in Redis metadata
-      await this.redisClient.hset(
-        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
-        'currentRoom',
-        '',
-      );
+      // Clear currentRoom in Redis metadata and refresh TTL
+      const metaKey = `${SOCKET_META_KEY_PREFIX}:${client.id}`;
+      await Promise.all([
+        this.redisClient.hset(metaKey, 'currentRoom', ''),
+        this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
+      ]);
     }
 
     client.emit('draw.left', {});
@@ -538,17 +543,27 @@ export class DrawGateway
       userAgent: string;
     }> = [];
 
+    // Get all currently connected socket IDs from Socket.io
+    const activeSockets = await this.server.allSockets();
+
     for (const key of keys) {
       const metadata = await this.redisClient.hgetall(key);
       if (metadata && metadata.userId) {
-        sockets.push({
-          userId: metadata.userId,
-          socketId: metadata.socketId,
-          connectedAt: metadata.connectedAt,
-          currentRoom: metadata.currentRoom || '',
-          ipAddress: metadata.ipAddress,
-          userAgent: metadata.userAgent,
-        });
+        // Only include sockets that are actually connected to this server cluster
+        // This filters out stale entries that may have survived a crash
+        if (activeSockets.has(metadata.socketId)) {
+          sockets.push({
+            userId: metadata.userId,
+            socketId: metadata.socketId,
+            connectedAt: metadata.connectedAt,
+            currentRoom: metadata.currentRoom || '',
+            ipAddress: metadata.ipAddress,
+            userAgent: metadata.userAgent,
+          });
+        } else {
+          // Clean up stale metadata
+          await this.redisClient.del(key);
+        }
       }
     }
 

@@ -44,7 +44,22 @@ export class AdminController {
     return this.adminService.searchUsers(query);
   }
 
-  @Get('users/:userId')
+  @Get('users/export')
+  @Header('Content-Type', 'text/csv')
+  async exportUsers(
+    @Query() query: UserFilterQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const csv = await this.adminService.exportUsers(query);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=users-export-${timestamp}.csv`,
+    );
+    res.send(csv);
+  }
+
+  @Get('users/details/:userId')
   getUserDetails(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.adminService.getUserDetails(userId);
   }
@@ -70,20 +85,5 @@ export class AdminController {
   @Get('sockets')
   getActiveSockets(@Query() query: PaginationQueryDto) {
     return this.adminService.getActiveSockets(query);
-  }
-
-  @Get('users/export')
-  @Header('Content-Type', 'text/csv')
-  async exportUsers(
-    @Query() query: UserFilterQueryDto,
-    @Res() res: Response,
-  ): Promise<void> {
-    const csv = await this.adminService.exportUsers(query);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=users-export-${timestamp}.csv`,
-    );
-    res.send(csv);
   }
 }

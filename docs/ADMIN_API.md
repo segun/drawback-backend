@@ -294,7 +294,7 @@ GET /api/admin/users/search?q=@example.com&searchField=email&page=1&limit=50
 
 ---
 
-### `GET /admin/users/:userId`
+### `GET /admin/users/details/:userId`
 
 Get detailed information about a specific user.
 
@@ -305,7 +305,7 @@ Get detailed information about a specific user.
 
 **Request**
 ```
-GET /api/admin/users/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+GET /api/admin/users/details/a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Authorization: Bearer <adminToken>
 ```
 
@@ -655,7 +655,7 @@ All errors follow this format:
 | `GET` | `/admin/users` | List all users (paginated) |
 | `GET` | `/admin/users/filter` | Filter users by criteria |
 | `GET` | `/admin/users/search` | Search users by email/displayName |
-| `GET` | `/admin/users/:userId` | Get single user details |
+| `GET` | `/admin/users/details/:userId` | Get single user details |
 | `GET` | `/admin/users/export` | Export users as CSV file |
 | `POST` | `/admin/users/ban` | Ban users (batch) |
 | `POST` | `/admin/users/unban` | Unban users (batch) |
