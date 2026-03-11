@@ -2,12 +2,15 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -62,5 +65,25 @@ export class AdminController {
     @Body() dto: ResetUserPasswordsDto,
   ) {
     return this.adminService.resetUserPasswords(admin, dto.userIds);
+  }
+
+  @Get('sockets')
+  getActiveSockets(@Query() query: PaginationQueryDto) {
+    return this.adminService.getActiveSockets(query);
+  }
+
+  @Get('users/export')
+  @Header('Content-Type', 'text/csv')
+  async exportUsers(
+    @Query() query: UserFilterQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const csv = await this.adminService.exportUsers(query);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=users-export-${timestamp}.csv`,
+    );
+    res.send(csv);
   }
 }

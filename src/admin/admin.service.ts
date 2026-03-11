@@ -5,10 +5,12 @@ import { randomUUID } from 'crypto';
 import { User } from '../users/entities/user.entity';
 import { AdminAuditLog } from './entities/admin-audit-log.entity';
 import { MailService } from '../mail/mail.service';
+import { DrawGateway } from '../realtime/draw.gateway';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { UserFilterQueryDto } from './dto/user-filter-query.dto';
 import { SearchField, UserSearchQueryDto } from './dto/user-search-query.dto';
 import { BanUsersDto } from './dto/ban-users.dto';
+import { SocketInfoDto } from './dto/socket-info.dto';
 import { AdminAction } from './enums/admin-action.enum';
 import { AuthService } from '../auth/auth.service';
 
@@ -20,6 +22,7 @@ export class AdminService {
     @InjectRepository(AdminAuditLog)
     private readonly auditLogRepository: Repository<AdminAuditLog>,
     private readonly mailService: MailService,
+    private readonly drawGateway: DrawGateway,
   ) {}
 
   async listUsers(
@@ -194,5 +197,140 @@ export class AdminService {
     });
 
     return { emailsSent, failed };
+  }
+
+  async getActiveSockets(dto: PaginationQueryDto): Promise<{
+    data: SocketInfoDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const allSockets = await this.drawGateway.getActiveSocketsMetadata();
+
+    // Sort by connectedAt descending (most recent first)
+    allSockets.sort(
+      (a, b) =>
+        new Date(b.connectedAt).getTime() - new Date(a.connectedAt).getTime(),
+    );
+
+    // Apply pagination
+    const skip = (dto.page - 1) * dto.limit;
+    const paginatedSockets = allSockets.slice(skip, skip + dto.limit);
+
+    // Fetch user details for each socket
+    const userIds = paginatedSockets.map((s) => s.userId);
+    const users = await this.userRepository.find({
+      where: { id: In(userIds) },
+      select: ['id', 'email', 'displayName'],
+    });
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const data: SocketInfoDto[] = paginatedSockets.map((socket) => {
+      const user = userMap.get(socket.userId);
+      return {
+        userId: socket.userId,
+        userEmail: user?.email || 'unknown',
+        userDisplayName: user?.displayName || 'unknown',
+        socketId: socket.socketId,
+        connectedAt: socket.connectedAt,
+        currentRoom: socket.currentRoom || null,
+        ipAddress: socket.ipAddress,
+        userAgent: socket.userAgent,
+      };
+    });
+
+    return {
+      data,
+      total: allSockets.length,
+      page: dto.page,
+      limit: dto.limit,
+    };
+  }
+
+  async exportUsers(dto: UserFilterQueryDto): Promise<string> {
+    // Use the same filtering logic as filterUsers but without pagination
+    const qb = this.userRepository.createQueryBuilder('user');
+
+    if (dto.mode !== undefined) {
+      qb.andWhere('user.mode = :mode', { mode: dto.mode });
+    }
+    if (dto.appearInSearches !== undefined) {
+      qb.andWhere('user.appearInSearches = :appearInSearches', {
+        appearInSearches: dto.appearInSearches,
+      });
+    }
+    if (dto.appearInDiscoveryGame !== undefined) {
+      qb.andWhere('user.appearInDiscoveryGame = :appearInDiscoveryGame', {
+        appearInDiscoveryGame: dto.appearInDiscoveryGame,
+      });
+    }
+    if (dto.isBlocked !== undefined) {
+      qb.andWhere('user.isBlocked = :isBlocked', {
+        isBlocked: dto.isBlocked,
+      });
+    }
+    if (dto.isActivated !== undefined) {
+      qb.andWhere('user.isActivated = :isActivated', {
+        isActivated: dto.isActivated,
+      });
+    }
+
+    const users = await qb.orderBy('user.createdAt', 'DESC').getMany();
+
+    // Build CSV manually
+    const headers = [
+      'id',
+      'email',
+      'displayName',
+      'mode',
+      'role',
+      'isActivated',
+      'isBlocked',
+      'blockedAt',
+      'blockedReason',
+      'appearInSearches',
+      'appearInDiscoveryGame',
+      'hasDiscoveryAccess',
+      'createdAt',
+      'updatedAt',
+    ];
+
+    const rows: string[][] = users.map((user) => {
+      const blockedAtStr = user.blockedAt
+        ? (user.blockedAt as Date).toISOString()
+        : '';
+      return [
+        user.id,
+        user.email,
+        user.displayName,
+        user.mode,
+        user.role,
+        String(user.isActivated),
+        String(user.isBlocked),
+        blockedAtStr,
+        user.blockedReason || '',
+        String(user.appearInSearches),
+        String(user.appearInDiscoveryGame),
+        String(user.hasDiscoveryAccess),
+        user.createdAt.toISOString(),
+        user.updatedAt.toISOString(),
+      ];
+    });
+
+    // Escape and quote CSV fields
+    const escapeCsvField = (field: string): string => {
+      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+
+    const csvLines = [
+      headers.join(','),
+      ...rows.map((row) => row.map(escapeCsvField).join(',')),
+    ];
+
+    return csvLines.join('\n');
   }
 }

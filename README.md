@@ -40,7 +40,14 @@ ADMIN_PASSWORD=your-secure-password
 yarn add:admin
 ```
 
-This creates a new admin user or promotes an existing user to admin role. See [docs/ADMIN_API.md](docs/ADMIN_API.md) for the full admin API reference.
+This creates a new admin user or promotes an existing user to admin role.
+
+**Admin API Documentation:** See [docs/ADMIN_API.md](docs/ADMIN_API.md) for the complete admin API reference including:
+- User management (list, filter, search, details)
+- Ban/unban operations (single and batch)
+- Password reset (single and batch)
+- Active socket monitoring
+- CSV data export
 
 ## Database Migrations
 

@@ -481,6 +481,130 @@ or (if some emails failed):
 
 ---
 
+## Socket Monitoring
+
+### `GET /admin/sockets`
+
+View all active WebSocket connections with user and connection details.
+
+**Query Parameters**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | number | 1 | Page number (min: 1) |
+| `limit` | number | 100 | Items per page (min: 1, max: 500) |
+
+**Request**
+```
+GET /api/admin/sockets?page=1&limit=50
+Authorization: Bearer <adminToken>
+```
+
+**Response `200`**
+```json
+{
+  "data": [
+    {
+      "userId": "uuid",
+      "userEmail": "user@example.com",
+      "userDisplayName": "@username",
+      "socketId": "socket-id-xyz",
+      "connectedAt": "2026-03-10T14:30:00.000Z",
+      "currentRoom": "room-uuid",
+      "ipAddress": "192.168.1.100",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
+    }
+  ],
+  "total": 23,
+  "page": 1,
+  "limit": 50
+}
+```
+
+**Field Descriptions:**
+- `userId` — User ID of the connected client
+- `userEmail` — Email address of the user
+- `userDisplayName` — Display name of the user
+- `socketId` — Unique Socket.IO connection ID
+- `connectedAt` — ISO 8601 timestamp of when the socket connected
+- `currentRoom` — Chat room ID if user is currently in a drawing session, or `null`
+- `ipAddress` — Client IP address (IPv6 prefix `::ffff:` stripped)
+- `userAgent` — Browser/client user agent string
+
+**Use Cases:**
+- Monitor active connections in real-time
+- Investigate connection issues for specific users
+- Verify user presence in rooms
+- Track concurrent connection counts
+
+> **Note:** Sockets are automatically removed when users disconnect. This endpoint returns only currently active connections.
+
+---
+
+## Data Export
+
+### `GET /admin/users/export`
+
+Export filtered user data as CSV file.
+
+**Query Parameters**
+
+Same filtering options as `/admin/users/filter` (without pagination):
+
+| Param | Type | Optional | Description |
+|-------|------|----------|-------------|
+| `mode` | string | yes | `PUBLIC` or `PRIVATE` |
+| `appearInSearches` | boolean | yes | Filter by search visibility |
+| `appearInDiscoveryGame` | boolean | yes | Filter by discovery game participation |
+| `isBlocked` | boolean | yes | Filter by blocked status |
+| `isActivated` | boolean | yes | Filter by activation status |
+
+**Request Examples**
+```
+GET /api/admin/users/export
+GET /api/admin/users/export?mode=PRIVATE
+GET /api/admin/users/export?isBlocked=true
+GET /api/admin/users/export?appearInDiscoveryGame=true&isActivated=true
+```
+
+**Response `200`**
+
+Returns a CSV file with automatic download:
+
+```
+Content-Type: text/csv
+Content-Disposition: attachment; filename=users-export-2026-03-10T14-30-00-000Z.csv
+
+id,email,displayName,mode,role,isActivated,isBlocked,blockedAt,blockedReason,appearInSearches,appearInDiscoveryGame,hasDiscoveryAccess,createdAt,updatedAt
+a1b2c3d4-e5f6-7890-abcd-ef1234567890,user@example.com,@username,PUBLIC,USER,true,false,,,true,false,false,2026-03-01T10:00:00.000Z,2026-03-01T10:00:00.000Z
+...
+```
+
+**CSV Columns:**
+- `id` — User UUID
+- `email` — Email address
+- `displayName` — Display name
+- `mode` — PUBLIC or PRIVATE
+- `role` — USER or ADMIN
+- `isActivated` — Account activation status
+- `isBlocked` — Ban status
+- `blockedAt` — Ban timestamp (empty if not blocked)
+- `blockedReason` — Ban reason (empty if not blocked)
+- `appearInSearches` — Search visibility flag
+- `appearInDiscoveryGame` — Discovery game participation flag
+- `hasDiscoveryAccess` — Discovery game access flag
+- `createdAt` — Account creation timestamp
+- `updatedAt` — Last update timestamp
+
+**Use Cases:**
+- Bulk export for data analysis
+- Compliance and data audit reports
+- Backup of user data
+- Import into spreadsheet tools
+
+> **Note:** CSV fields containing commas, quotes, or newlines are properly escaped per RFC 4180.
+
+---
+
 ## Error Handling
 
 ### Standard Error Response
@@ -532,9 +656,11 @@ All errors follow this format:
 | `GET` | `/admin/users/filter` | Filter users by criteria |
 | `GET` | `/admin/users/search` | Search users by email/displayName |
 | `GET` | `/admin/users/:userId` | Get single user details |
+| `GET` | `/admin/users/export` | Export users as CSV file |
 | `POST` | `/admin/users/ban` | Ban users (batch) |
 | `POST` | `/admin/users/unban` | Unban users (batch) |
 | `POST` | `/admin/users/reset-passwords` | Reset passwords (batch) |
+| `GET` | `/admin/sockets` | View active WebSocket connections |
 
 ### Example Frontend Usage
 
@@ -592,6 +718,21 @@ const resetResponse = await fetch('/api/admin/users/reset-passwords', {
     userIds: ['user-uuid-1', 'user-uuid-2']
   })
 });
+
+// View active sockets
+const socketsResponse = await fetch('/api/admin/sockets?page=1&limit=50', {
+  headers
+});
+const { data: activeSockets } = await socketsResponse.json();
+
+// Export users as CSV
+const exportUrl = '/api/admin/users/export?mode=PRIVATE&isBlocked=true';
+const csvBlob = await fetch(exportUrl, { headers }).then(r => r.blob());
+const downloadUrl = window.URL.createObjectURL(csvBlob);
+const a = document.createElement('a');
+a.href = downloadUrl;
+a.download = `users-export-${Date.now()}.csv`;
+a.click();
 ```
 
 ---

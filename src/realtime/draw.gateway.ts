@@ -45,6 +45,9 @@ const USER_SOCKET_KEY = 'drawback:user-socket';
 /** Redis key prefix for the reverse socketId→userId mapping shared across all workers. */
 const SOCKET_USER_KEY_PREFIX = 'drawback:socket-user';
 
+/** Redis key prefix for socket metadata (IP, user-agent, connectedAt, etc.). */
+const SOCKET_META_KEY_PREFIX = 'drawback:socket-meta';
+
 @WebSocketGateway({
   namespace: '/drawback',
   cors: {
@@ -200,10 +203,34 @@ export class DrawGateway
 
     this.socketToUser.set(client.id, userId);
 
-    // Persist user→socket and socket→user mappings in Redis (shared across all processes/workers).
+    // Extract socket metadata
+    const ipAddress = (client.handshake.address || 'unknown').replace(
+      /^::ffff:/,
+      '',
+    ); // Strip IPv6 prefix
+    const userAgent =
+      (client.handshake.headers['user-agent'] as string) || 'unknown';
+    const connectedAt = new Date().toISOString();
+
+    // Persist user→socket, socket→user mappings, and socket metadata in Redis
     await Promise.all([
       this.redisClient.hset(USER_SOCKET_KEY, userId, client.id),
       this.redisClient.set(`${SOCKET_USER_KEY_PREFIX}:${client.id}`, userId),
+      this.redisClient.hset(
+        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
+        'userId',
+        userId,
+        'socketId',
+        client.id,
+        'connectedAt',
+        connectedAt,
+        'ipAddress',
+        ipAddress,
+        'userAgent',
+        userAgent,
+        'currentRoom',
+        '', // Initially not in any room
+      ),
     ]);
 
     this.logger.debug(`Socket connected: ${client.id} for user ${userId}`);
@@ -235,10 +262,14 @@ export class DrawGateway
       await Promise.all([
         this.redisClient.hdel(USER_SOCKET_KEY, userId),
         this.redisClient.del(`${SOCKET_USER_KEY_PREFIX}:${client.id}`),
+        this.redisClient.del(`${SOCKET_META_KEY_PREFIX}:${client.id}`),
       ]);
     } else {
-      // Still clean up the reverse mapping even if user reconnected elsewhere
-      await this.redisClient.del(`${SOCKET_USER_KEY_PREFIX}:${client.id}`);
+      // Still clean up the reverse mapping and metadata even if user reconnected elsewhere
+      await Promise.all([
+        this.redisClient.del(`${SOCKET_USER_KEY_PREFIX}:${client.id}`),
+        this.redisClient.del(`${SOCKET_META_KEY_PREFIX}:${client.id}`),
+      ]);
     }
 
     this.logger.debug(`Socket disconnected: ${client.id} for user ${userId}`);
@@ -321,6 +352,13 @@ export class DrawGateway
       await client.join(roomId);
       this.socketToRoom.set(client.id, roomId);
 
+      // Update currentRoom in Redis metadata
+      await this.redisClient.hset(
+        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
+        'currentRoom',
+        roomId,
+      );
+
       // Collect user IDs of peers already in the room so the joining client
       // receives presence info immediately, without waiting for a separate
       // draw.peer.joined event (which only fires for the peers, not the joiner).
@@ -378,6 +416,13 @@ export class DrawGateway
       client.to(room).emit('draw.peer.left', { userId });
       await client.leave(room);
       this.socketToRoom.delete(client.id);
+
+      // Clear currentRoom in Redis metadata
+      await this.redisClient.hset(
+        `${SOCKET_META_KEY_PREFIX}:${client.id}`,
+        'currentRoom',
+        '',
+      );
     }
 
     client.emit('draw.left', {});
@@ -467,6 +512,47 @@ export class DrawGateway
     }
 
     this.server.to(socketId).emit(event, payload);
+  }
+
+  /**
+   * Get all active socket metadata from Redis.
+   * Used by admin endpoints to monitor connected sockets.
+   */
+  async getActiveSocketsMetadata(): Promise<
+    Array<{
+      userId: string;
+      socketId: string;
+      connectedAt: string;
+      currentRoom: string;
+      ipAddress: string;
+      userAgent: string;
+    }>
+  > {
+    const keys = await this.redisClient.keys(`${SOCKET_META_KEY_PREFIX}:*`);
+    const sockets: Array<{
+      userId: string;
+      socketId: string;
+      connectedAt: string;
+      currentRoom: string;
+      ipAddress: string;
+      userAgent: string;
+    }> = [];
+
+    for (const key of keys) {
+      const metadata = await this.redisClient.hgetall(key);
+      if (metadata && metadata.userId) {
+        sockets.push({
+          userId: metadata.userId,
+          socketId: metadata.socketId,
+          connectedAt: metadata.connectedAt,
+          currentRoom: metadata.currentRoom || '',
+          ipAddress: metadata.ipAddress,
+          userAgent: metadata.userAgent,
+        });
+      }
+    }
+
+    return sockets;
   }
 
   // ---------------------------------------------------------------------------
