@@ -1,0 +1,8 @@
+export enum ReportType {
+  INAPPROPRIATE_CONTENT = 'INAPPROPRIATE_CONTENT',
+  HARASSMENT = 'HARASSMENT',
+  CSAE = 'CSAE', // Child Sexual Abuse and Exploitation
+  SPAM = 'SPAM',
+  IMPERSONATION = 'IMPERSONATION',
+  OTHER = 'OTHER',
+}

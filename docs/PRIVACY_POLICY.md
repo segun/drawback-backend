@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated:** February 25, 2026
+**Last Updated:** March 11, 2026
 
 ## 1. Introduction
 
@@ -180,8 +180,10 @@ Please read this Privacy Policy carefully. If you do not agree with our policies
 - We may retain anonymized usage data for analytics (aggregated, non-identifiable)
 - Backup copies may exist for a limited period but will be purged according to our backup retention policy
 
-### 7.3 Legal Requirements
+### 7.3 Legal and Safety Requirements
 - We may retain information longer if required by law or for legitimate business purposes
+- Session logs (user IDs, IP addresses, timestamps, connection events) may be retained for up to 30 days for safety and abuse prevention purposes
+- In cases of reported abuse or suspected child sexual abuse and exploitation (CSAE), we will preserve all relevant data as required by law and for cooperation with law enforcement
 
 ---
 
@@ -204,25 +206,52 @@ Drawback is not intended for children under 13 years old. We do not knowingly co
 
 ---
 
-## 10. International Data Transfers
+## 10. Child Safety and Abuse Prevention
+
+Drawback maintains a zero-tolerance policy regarding child sexual abuse and exploitation (CSAE). We are committed to protecting users and preventing illegal content on our platform.
+
+### 10.1 Our Commitment
+- We prohibit any content or behavior that exploits, endangers, or sexualizes minors
+- We cooperate fully with law enforcement and report violations to the National Center for Missing & Exploited Children (NCMEC) as required by law
+- We maintain comprehensive CSAE prevention and response standards
+
+### 10.2 What We Collect for Safety
+When investigating reported abuse or suspected CSAE:
+- Session metadata (user IDs, timestamps, IP addresses)
+- Chat request history and participant information
+- Account information of reported users
+- Any content preserved pursuant to legal obligations
+
+### 10.3 Reporting and Cooperation
+- Users can report concerning content to **safety@drawback.chat** or **abuse@drawback.chat**
+- We review all reports within 24 hours
+- We preserve evidence and cooperate with law enforcement investigations
+- We comply with mandatory reporting requirements under 18 U.S.C. § 2258A
+
+### 10.4 Learn More
+For complete information about our child safety measures, see our **CSAE Standards** document available in our documentation.
+
+---
+
+## 11. International Data Transfers
 
 If you access Drawback from outside the jurisdiction where our servers are located, your information may be transferred to, stored in, and processed in jurisdictions with different data protection laws. By using Drawback, you consent to the transfer of your information to jurisdictions outside your country of residence.
 
 ---
 
-## 11. Third-Party Links
+## 12. Third-Party Links
 
 Drawback may contain links to third-party websites and services not operated by us. This Privacy Policy does not apply to third-party services, and we are not responsible for their privacy practices. We encourage you to review the privacy policies of any third-party service before providing personal information.
 
 ---
 
-## 12. Do Not Track
+## 13. Do Not Track
 
 Some browsers include a "Do Not Track" feature. Currently, there is no industry standard for recognizing Do Not Track signals. Drawback does not respond to Do Not Track browser signals, but you may disable cookies and limit tracking through your browser settings.
 
 ---
 
-## 13. California Privacy Rights
+## 14. California Privacy Rights
 
 **For California Residents (CCPA):**
 - You have the right to know what personal information is collected, used, and shared
@@ -230,11 +259,11 @@ Some browsers include a "Do Not Track" feature. Currently, there is no industry 
 - You have the right to opt-out of the sale or sharing of your personal information
 - You have the right to non-discrimination for exercising your privacy rights
 
-To submit a request, contact us using the information in Section 16. We will verify your identity and respond within 45 days.
+To submit a request, contact us using the information in Section 17. We will verify your identity and respond within 45 days.
 
 ---
 
-## 14. European Union Privacy Rights
+## 15. European Union Privacy Rights
 
 **For EU Residents (GDPR):**
 - You have the right to access, correct, or delete your personal information
@@ -243,11 +272,11 @@ To submit a request, contact us using the information in Section 16. We will ver
 - You have the right to object to processing
 - You have the right to lodge a complaint with your supervisory authority
 
-To submit a request, contact us using the information in Section 16. We will respond within 30 days.
+To submit a request, contact us using the information in Section 17. We will respond within 30 days.
 
 ---
 
-## 15. Updates to This Privacy Policy
+## 16. Updates to This Privacy Policy
 
 We may update this Privacy Policy from time to time to reflect changes in our practices, technology, applicable laws, or other factors. When we make material changes, we will:
 - Update the "Last Updated" date at the top
@@ -257,7 +286,7 @@ Your continued use of Drawback after changes become effective constitutes your a
 
 ---
 
-## 16. Contact Us
+## 17. Contact Us
 
 If you have questions, concerns, or requests regarding this Privacy Policy or our privacy practices, please contact us:
 
@@ -267,22 +296,22 @@ We will respond to your inquiry within 30 days of receipt.
 
 ---
 
-## 17. Additional Information by Jurisdiction
+## 18. Additional Information by Jurisdiction
 
-### 17.1 United Kingdom (GDPR/DPA 2018)
-You have the same rights as EU residents listed in Section 14.
+### 18.1 United Kingdom (GDPR/DPA 2018)
+You have the same rights as EU residents listed in Section 15.
 
-### 17.2 Canada (PIPEDA)
+### 18.2 Canada (PIPEDA)
 - You have the right to access and request correction of your personal information
 - You have the right to lodge a complaint with the Office of the Privacy Commissioner of Canada
 
-### 17.3 Australia (Privacy Act 1988)
+### 18.3 Australia (Privacy Act 1988)
 - You have the right to request access and correction of your personal information
 - You can lodge a complaint with the Office of the Australian Information Commissioner
 
 ---
 
-## 18. Acknowledgement
+## 19. Acknowledgement
 
 By using Drawback, you acknowledge that you have read this Privacy Policy and agree to its terms. If you do not agree, please discontinue your use of the Service.
 

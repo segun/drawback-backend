@@ -11,6 +11,8 @@ import { ChatModule } from './chat/chat.module';
 import { MailModule } from './mail/mail.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { ReportsModule } from './reports/reports.module';
+import { SessionEventsModule } from './session-events/session-events.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -64,6 +66,8 @@ import { UsersModule } from './users/users.module';
     BackupModule,
     PurchasesModule,
     AdminModule,
+    ReportsModule,
+    SessionEventsModule,
   ],
   controllers: [AppController],
   providers: [],

@@ -22,12 +22,17 @@ import { ResetUserPasswordsDto } from './dto/reset-user-passwords.dto';
 import { UnbanUsersDto } from './dto/unban-users.dto';
 import { UserFilterQueryDto } from './dto/user-filter-query.dto';
 import { UserSearchQueryDto } from './dto/user-search-query.dto';
+import { SessionEventsService } from '../session-events/session-events.service';
+import { SessionEventFiltersDto } from '../session-events/dto/session-event-filters.dto';
 
 @Controller('admin')
 @UseGuards(AdminGuard)
 @Throttle({ admin: { ttl: 60000, limit: 100 } })
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly sessionEventsService: SessionEventsService,
+  ) {}
 
   @Get('users')
   listUsers(@Query() query: PaginationQueryDto) {
@@ -85,5 +90,19 @@ export class AdminController {
   @Get('sockets')
   getActiveSockets(@Query() query: PaginationQueryDto) {
     return this.adminService.getActiveSockets(query);
+  }
+
+  @Get('session-events')
+  async getSessionEvents(
+    @Query() filters: SessionEventFiltersDto,
+    @Query('limit') limit = 100,
+    @Query('offset') offset = 0,
+  ) {
+    return this.sessionEventsService.findEvents(filters, limit, offset);
+  }
+
+  @Get('session-events/stats')
+  async getSessionEventStats() {
+    return this.sessionEventsService.getEventStats();
   }
 }

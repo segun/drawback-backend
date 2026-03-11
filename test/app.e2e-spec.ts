@@ -25,6 +25,7 @@ import { UsersModule } from './../src/users/users.module';
 import { SavedChat } from './../src/chat/entities/saved-chat.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { DrawGateway } from './../src/realtime/draw.gateway';
+import { SessionEvent } from './../src/session-events/entities/session-event.entity';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashed'),
@@ -134,6 +135,23 @@ const savedChatsRepo = {
   remove: jest.fn().mockResolvedValue({}),
 };
 
+const sessionEventsRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'session-event-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'session-event-new',
+    }),
+  ),
+  delete: jest.fn().mockResolvedValue({}),
+  createQueryBuilder: jest.fn(() => qbMock(0, [])),
+};
+
 /** Gateway mock – prevents Socket.IO from starting */
 const gatewayMock = {
   notifyChatRequested: jest.fn(),
@@ -176,6 +194,8 @@ describe('Drawback API (e2e)', () => {
       .useValue(chatRepo)
       .overrideProvider(getRepositoryToken(SavedChat))
       .useValue(savedChatsRepo)
+      .overrideProvider(getRepositoryToken(SessionEvent))
+      .useValue(sessionEventsRepo)
       .overrideProvider(MailService)
       .useValue({ sendActivationEmail: jest.fn().mockResolvedValue(undefined) })
       .overrideProvider(DrawGateway)

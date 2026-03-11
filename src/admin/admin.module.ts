@@ -4,6 +4,7 @@ import { User } from '../users/entities/user.entity';
 import { AdminAuditLog } from './entities/admin-audit-log.entity';
 import { MailModule } from '../mail/mail.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { SessionEventsModule } from '../session-events/session-events.module';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 
@@ -12,6 +13,7 @@ import { AdminController } from './admin.controller';
     TypeOrmModule.forFeature([User, AdminAuditLog]),
     forwardRef(() => MailModule),
     forwardRef(() => RealtimeModule),
+    SessionEventsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

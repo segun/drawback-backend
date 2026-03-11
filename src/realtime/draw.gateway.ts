@@ -25,6 +25,8 @@ import { Namespace, Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
+import { SessionEventsService } from '../session-events/session-events.service';
+import { SessionEventType } from '../session-events/enums/session-event-type.enum';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { DrawClearDto } from './dto/draw-clear.dto';
 import { DrawEmoteDto } from './dto/draw-emote.dto';
@@ -113,6 +115,7 @@ export class DrawGateway
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly config: ConfigService,
+    private readonly sessionEventsService: SessionEventsService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -238,6 +241,14 @@ export class DrawGateway
       this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
     ]);
 
+    // Log session event for CSAE compliance
+    this.sessionEventsService.logEvent(
+      userId,
+      SessionEventType.CONNECT,
+      ipAddress,
+      { socketId: client.id, userAgent },
+    );
+
     this.logger.debug(`Socket connected: ${client.id} for user ${userId}`);
   }
 
@@ -276,6 +287,14 @@ export class DrawGateway
         this.redisClient.del(`${SOCKET_META_KEY_PREFIX}:${client.id}`),
       ]);
     }
+
+    // Log session event for CSAE compliance
+    this.sessionEventsService.logEvent(
+      userId,
+      SessionEventType.DISCONNECT,
+      undefined,
+      { socketId: client.id, room },
+    );
 
     this.logger.debug(`Socket disconnected: ${client.id} for user ${userId}`);
   }
@@ -389,6 +408,15 @@ export class DrawGateway
 
       client.emit('chat.joined', { roomId, requestId: dto.requestId, peers });
 
+      // Log session event for CSAE compliance
+      const ipAddress = (client.handshake.address || 'unknown').replace(/^::ffff:/, '');
+      this.sessionEventsService.logEvent(
+        userId,
+        SessionEventType.CHAT_JOINED,
+        ipAddress,
+        { socketId: client.id, roomId, requestId: dto.requestId },
+      );
+
       // tell the other participant a peer has joined
       client.to(roomId).emit('draw.peer.joined', { userId });
 
@@ -428,6 +456,16 @@ export class DrawGateway
         this.redisClient.hset(metaKey, 'currentRoom', ''),
         this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
       ]);
+
+      // Log session event for CSAE compliance
+      if (userId) {
+        this.sessionEventsService.logEvent(
+          userId,
+          SessionEventType.CHAT_LEFT,
+          undefined,
+          { socketId: client.id, roomId: room },
+        );
+      }
     }
 
     client.emit('draw.left', {});

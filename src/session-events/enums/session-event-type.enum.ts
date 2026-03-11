@@ -1,0 +1,6 @@
+export enum SessionEventType {
+  CONNECT = 'CONNECT',
+  DISCONNECT = 'DISCONNECT',
+  CHAT_JOINED = 'CHAT_JOINED',
+  CHAT_LEFT = 'CHAT_LEFT',
+}

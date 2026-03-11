@@ -756,3 +756,275 @@ ORDER BY createdAt DESC;
 - `createdAt` — Timestamp
 
 This provides full accountability for all administrative actions.
+
+---
+
+## Safety & Monitoring
+
+### `GET /api/reports/admin`
+
+List all abuse reports with optional filtering.
+
+**Query Parameters**
+| Param | Type | Optional | Description |
+|-------|------|----------|-------------|
+| `status` | string | yes | `PENDING`, `UNDER_REVIEW`, `RESOLVED`, `DISMISSED` |
+| `reportType` | string | yes | `CSAE`, `HARASSMENT`, `INAPPROPRIATE_CONTENT`, `SPAM`, `IMPERSONATION`, `OTHER` |
+| `reportedUserId` | UUID | yes | Filter by reported user |
+| `reporterId` | UUID | yes | Filter by reporter |
+
+**Request**
+```
+GET /api/reports/admin?status=PENDING&reportType=CSAE
+Authorization: Bearer <adminToken>
+```
+
+**Response `200`**
+```json
+[{
+  "id": "uuid",
+  "reporter": { "id": "uuid", "displayName": "@username", "email": "reporter@example.com" },
+  "reportedUser": { "id": "uuid", "displayName": "@badactor", "email": "bad@example.com" },
+  "reportType": "HARASSMENT",
+  "description": "User sent threatening messages",
+  "chatRequestId": "uuid",
+  "sessionContext": "Session details...",
+  "status": "PENDING",
+  "adminNotes": "Investigating...",
+  "resolvedBy": "admin-uuid",
+  "resolvedAt": "2026-03-11T11:00:00.000Z",
+  "createdAt": "2026-03-11T10:30:00.000Z",
+  "updatedAt": "2026-03-11T11:00:00.000Z"
+}]
+```
+
+---
+
+### `GET /api/reports/admin/stats`
+
+Get report statistics dashboard.
+
+**Request**
+```
+GET /api/reports/admin/stats
+Authorization: Bearer <adminToken>
+```
+
+**Response `200`**
+```json
+{
+  "total": 156,
+  "pending": 12,
+  "underReview": 8,
+  "resolved": 130,
+  "dismissed": 6
+}
+```
+
+---
+
+### `PATCH /api/reports/admin/:id`
+
+Update report status and add admin notes.
+
+**Request Body**
+```json
+{
+  "status": "UNDER_REVIEW | RESOLVED | DISMISSED | PENDING",
+  "adminNotes": "string (optional, max 2000 chars)"
+}
+```
+
+**Request**
+```
+PATCH /api/reports/admin/abc123
+Authorization: Bearer <adminToken>
+Content-Type: application/json
+```
+
+**Response `200`**
+
+Returns updated report (same structure as list endpoint).
+
+**Note:** Setting `RESOLVED` or `DISMISSED` auto-sets `resolvedBy` to current admin and `resolvedAt` to now.
+
+---
+
+### `DELETE /api/reports/admin/:id`
+
+Permanently delete a report.
+
+**Request**
+```
+DELETE /api/reports/admin/abc123
+Authorization: Bearer <adminToken>
+```
+
+**Response:** `204 No Content`
+
+---
+
+### `GET /api/admin/session-events`
+
+Query historical connection and chat session events (30-day retention).
+
+**Query Parameters**
+| Param | Type | Optional | Description |
+|-------|------|----------|-------------|
+| `userId` | UUID | yes | Filter by user |
+| `eventType` | string | yes | `CONNECT`, `DISCONNECT`, `CHAT_JOINED`, `CHAT_LEFT` |
+| `startDate` | ISO date | yes | Filter from date |
+| `endDate` | ISO date | yes | Filter to date |
+
+**Request**
+```
+GET /api/admin/session-events?userId=abc123&startDate=2026-03-01
+Authorization: Bearer <adminToken>
+```
+
+**Response `200`**
+```json
+[{
+  "id": "uuid",
+  "userId": "uuid",
+  "eventType": "CONNECT",
+  "ipAddress": "192.168.1.1",
+  "metadata": { 
+    "socketId": "xyz", 
+    "userAgent": "Mozilla/5.0...",
+    "roomId": "room-uuid",
+    "requestId": "request-uuid"
+  },
+  "createdAt": "2026-03-11T10:30:00.000Z"
+}]
+```
+
+**Event Types:**
+- `CONNECT` — WebSocket connection (captures IP + user agent)
+- `DISCONNECT` — WebSocket disconnection
+- `CHAT_JOINED` — Joined drawing room (captures IP + room ID + request ID)
+- `CHAT_LEFT` — Left drawing room
+
+**Retention:** Events auto-deleted after 30 days (daily at 3 AM).
+
+**Use Cases:**
+- Investigate abuse reports (verify users were in same room)
+- Track IP addresses for NCMEC reports
+- Detect bot patterns (multiple IPs, excessive connections)
+- Audit user activity timeline
+
+---
+
+### `GET /api/admin/session-events/stats`
+
+Get session event statistics.
+
+**Request**
+```
+GET /api/admin/session-events/stats
+Authorization: Bearer <adminToken>
+```
+
+**Response `200`**
+```json
+{
+  "total": 5420,
+  "last24Hours": 342,
+  "last7Days": 1823,
+  "byType": {
+    "CONNECT": 1355,
+    "DISCONNECT": 1348,
+    "CHAT_JOINED": 1356,
+    "CHAT_LEFT": 1361
+  }
+}
+```
+
+---
+
+### Report Types Reference
+
+| Type | Description | Priority |
+|------|-------------|----------|
+| `CSAE` | Child abuse/exploitation | **Highest** |
+| `HARASSMENT` | Bullying, threats | High |
+| `INAPPROPRIATE_CONTENT` | Offensive content | Medium |
+| `SPAM` | Spam, bots | Medium |
+| `IMPERSONATION` | Fake identity | Low |
+| `OTHER` | Other violations | Low |
+
+### Report Status Reference
+
+| Status | Description |
+|--------|-------------|
+| `PENDING` | New report, awaiting review |
+| `UNDER_REVIEW` | Being investigated |
+| `RESOLVED` | Issue addressed |
+| `DISMISSED` | Not actionable |
+
+---
+
+## Safety Monitoring Quick Reference
+
+### All Safety Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/reports/admin` | List reports (with filters) |
+| `GET` | `/api/reports/admin/stats` | Report statistics |
+| `PATCH` | `/api/reports/admin/:id` | Update report status |
+| `DELETE` | `/api/reports/admin/:id` | Delete report |
+| `GET` | `/api/admin/session-events` | Query session history |
+| `GET` | `/api/admin/session-events/stats` | Session statistics |
+
+### Example: Investigate Harassment Report
+
+```typescript
+// 1. Get pending CSAE reports
+const reports = await fetch(
+  '/api/reports/admin?status=PENDING&reportType=CSAE',
+  { headers }
+).then(r => r.json());
+
+const report = reports[0];
+
+// 2. Get session events for reported user around report time
+const reportDate = new Date(report.createdAt);
+const startDate = new Date(reportDate.getTime() - 24*60*60*1000).toISOString();
+const events = await fetch(
+  `/api/admin/session-events?userId=${report.reportedUserId}&startDate=${startDate}`,
+  { headers }
+).then(r => r.json());
+
+// 3. Check if users were in same room
+const reporterEvents = await fetch(
+  `/api/admin/session-events?userId=${report.reporterId}&startDate=${startDate}`,
+  { headers }
+).then(r => r.json());
+
+const sharedRooms = events
+  .filter(e => e.eventType === 'CHAT_JOINED')
+  .filter(e => reporterEvents.some(re => 
+    re.metadata?.roomId === e.metadata?.roomId
+  ));
+
+// 4. Update report status
+await fetch(`/api/reports/admin/${report.id}`, {
+  method: 'PATCH',
+  headers,
+  body: JSON.stringify({
+    status: 'RESOLVED',
+    adminNotes: `Verified incident. Users were in room ${sharedRooms[0].metadata.roomId}. IP: ${events[0].ipAddress}. User banned and NCMEC report filed.`
+  })
+});
+
+// 5. Ban the user
+await fetch('/api/admin/users/ban', {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    userIds: [report.reportedUserId],
+    reason: `CSAE violation - Report #${report.id}`
+  })
+});
+```
