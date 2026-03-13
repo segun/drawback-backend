@@ -66,6 +66,11 @@ jobs:
       BACKUP_WRITE_DEBOUNCE_SECONDS: "60"
       MYSQLDUMP_BIN: /usr/bin/mysqldump
       MYSQL_BIN: /usr/bin/mysql
+      WEBAUTHN_RP_ID: drawback.chat
+      WEBAUTHN_RP_NAME: Drawback
+      WEBAUTHN_ORIGIN: https://drawback.chat,http://localhost:3000
+      ADMIN_EMAIL: admin@drawback.chat
+      ADMIN_PASSWORD: adminpassword
 
     steps:
       - name: Checkout code
