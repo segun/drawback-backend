@@ -297,9 +297,7 @@ export class AdminService {
     ];
 
     const rows: string[][] = users.map((user) => {
-      const blockedAtStr = user.blockedAt
-        ? (user.blockedAt as Date).toISOString()
-        : '';
+      const blockedAtStr = user.blockedAt ? user.blockedAt.toISOString() : '';
       return [
         user.id,
         user.email,

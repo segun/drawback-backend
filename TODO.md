@@ -1,3 +1,7 @@
+- [ ] **Management Endpoints:**
+- `GET /api/auth/passkey/credentials`
+- `DELETE /api/auth/passkey/credentials/:id`
+- **No specific rate limit** (protected by JWT authentication)
 - [x] Still having race condition where 2 people are waiting for each other.
 - [ ] Suddenly logs out in the middle of a drawing session. (Token expired or something like that)
 - [ ] Paid features. Save your canvases and download them. Copy you and your chatee canvas to your clipboard, paste them in your own canvas.

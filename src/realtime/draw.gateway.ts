@@ -409,7 +409,10 @@ export class DrawGateway
       client.emit('chat.joined', { roomId, requestId: dto.requestId, peers });
 
       // Log session event for CSAE compliance
-      const ipAddress = (client.handshake.address || 'unknown').replace(/^::ffff:/, '');
+      const ipAddress = (client.handshake.address || 'unknown').replace(
+        /^::ffff:/,
+        '',
+      );
       this.sessionEventsService.logEvent(
         userId,
         SessionEventType.CHAT_JOINED,

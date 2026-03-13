@@ -1,10 +1,10 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddAdminAuditLog1773160100000 implements MigrationInterface {
-    name = 'AddAdminAuditLog1773160100000'
+  name = 'AddAdminAuditLog1773160100000';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE \`admin_audit_logs\` (
                 \`id\` varchar(36) NOT NULL,
                 \`adminId\` varchar(36) NOT NULL,
@@ -16,9 +16,9 @@ export class AddAdminAuditLog1773160100000 implements MigrationInterface {
                 PRIMARY KEY (\`id\`)
             ) ENGINE=InnoDB
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP TABLE \`admin_audit_logs\``);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP TABLE \`admin_audit_logs\``);
+  }
 }

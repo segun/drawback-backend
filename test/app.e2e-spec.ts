@@ -14,6 +14,8 @@ import { App } from 'supertest/types';
 import { AppController } from './../src/app.controller';
 import { AppService } from './../src/app.service';
 import { AuthModule } from './../src/auth/auth.module';
+import { Credential } from './../src/auth/entities/credential.entity';
+import { CacheService } from './../src/cache/cache.service';
 import { ChatRequest } from './../src/chat/entities/chat-request.entity';
 import { ChatRequestStatus } from './../src/chat/enums/chat-request-status.enum';
 import { ChatModule } from './../src/chat/chat.module';
@@ -152,6 +154,23 @@ const sessionEventsRepo = {
   createQueryBuilder: jest.fn(() => qbMock(0, [])),
 };
 
+const credentialsRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  count: jest.fn().mockResolvedValue(0),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'cred-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'cred-new',
+    }),
+  ),
+  remove: jest.fn().mockResolvedValue({}),
+};
+
 /** Gateway mock – prevents Socket.IO from starting */
 const gatewayMock = {
   notifyChatRequested: jest.fn(),
@@ -188,6 +207,8 @@ describe('Drawback API (e2e)', () => {
     })
       .overrideProvider(getRepositoryToken(User))
       .useValue(usersRepo)
+      .overrideProvider(getRepositoryToken(Credential))
+      .useValue(credentialsRepo)
       .overrideProvider(getRepositoryToken(UserBlock))
       .useValue(blocksRepo)
       .overrideProvider(getRepositoryToken(ChatRequest))
@@ -196,6 +217,12 @@ describe('Drawback API (e2e)', () => {
       .useValue(savedChatsRepo)
       .overrideProvider(getRepositoryToken(SessionEvent))
       .useValue(sessionEventsRepo)
+      .overrideProvider(CacheService)
+      .useValue({
+        get: jest.fn(),
+        set: jest.fn(),
+        del: jest.fn(),
+      })
       .overrideProvider(MailService)
       .useValue({ sendActivationEmail: jest.fn().mockResolvedValue(undefined) })
       .overrideProvider(DrawGateway)

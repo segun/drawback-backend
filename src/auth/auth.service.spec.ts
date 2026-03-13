@@ -1,12 +1,15 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { CacheService } from '../cache/cache.service';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
+import { Credential } from './entities/credential.entity';
 
 // Mock bcrypt at module level so its exports are configurable
 jest.mock('bcrypt', () => ({
@@ -30,6 +33,7 @@ type MockedUsersRepo = {
   findOne: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
+  count: jest.Mock;
 };
 type MockedJwtService = { sign: jest.Mock };
 type MockedMailService = { sendActivationEmail: jest.Mock };
@@ -39,6 +43,7 @@ const repositoryMockFactory = (): MockedUsersRepo => ({
   findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
+  count: jest.fn().mockResolvedValue(0),
 });
 
 describe('AuthService', () => {
@@ -57,13 +62,31 @@ describe('AuthService', () => {
           useFactory: repositoryMockFactory,
         },
         {
+          provide: getRepositoryToken(Credential),
+          useFactory: repositoryMockFactory,
+        },
+        {
           provide: JwtService,
           useValue: { sign: jest.fn().mockReturnValue('jwt-token') },
+        },
+        {
+          provide: CacheService,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+          },
         },
         {
           provide: MailService,
           useValue: {
             sendActivationEmail: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('http://localhost:3001'),
           },
         },
         {

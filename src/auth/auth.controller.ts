@@ -2,20 +2,31 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
   Query,
   Redirect,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
+import { User } from '../users/entities/user.entity';
 import { AuthService } from './auth.service';
+import { CurrentUser } from './current-user.decorator';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import {
+  CredentialResponseDto,
+  FinishPasskeyRegistrationDto,
+  FinishPasskeyLoginDto,
+  StartPasskeyLoginDto,
+} from './dto/passkey.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -39,7 +50,11 @@ export class AuthController {
 
     if (result.success) {
       const email = encodeURIComponent(result.email as string);
-      return { url: `${base}?status=success&email=${email}`, statusCode: 302 };
+      const tempToken = encodeURIComponent(result.tempToken as string);
+      return {
+        url: `${base}?status=success&email=${email}&temp_token=${tempToken}`,
+        statusCode: 302,
+      };
     }
 
     const reason = encodeURIComponent(String(result.reason ?? 'Unknown error'));
@@ -133,5 +148,56 @@ export class AuthController {
       throw new BadRequestException('name query parameter is required');
     }
     return this.authService.isDisplayNameAvailable(name);
+  }
+
+  // ===== WebAuthn / Passkey Endpoints =====
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ auth: { ttl: 60000, limit: 10 } })
+  @Post('passkey/register/start')
+  startPasskeyRegistration(@CurrentUser() user: User) {
+    return this.authService.startPasskeyRegistration(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ auth: { ttl: 60000, limit: 10 } })
+  @Post('passkey/register/finish')
+  finishPasskeyRegistration(
+    @CurrentUser() user: User,
+    @Body() dto: FinishPasskeyRegistrationDto,
+  ) {
+    return this.authService.finishPasskeyRegistration(user.id, dto);
+  }
+
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
+  @Post('passkey/login/start')
+  startPasskeyLogin(@Body() dto: StartPasskeyLoginDto) {
+    return this.authService.startPasskeyLogin(dto);
+  }
+
+  @Throttle({ auth: { ttl: 60000, limit: 5 } })
+  @Post('passkey/login/finish')
+  finishPasskeyLogin(@Body() dto: FinishPasskeyLoginDto) {
+    return this.authService.finishPasskeyLogin(dto);
+  }
+
+  // ===== Passkey Credential Management =====
+
+  @UseGuards(JwtAuthGuard)
+  @Get('passkey/credentials')
+  async listCredentials(
+    @CurrentUser() user: User,
+  ): Promise<CredentialResponseDto[]> {
+    return this.authService.listCredentials(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('passkey/credentials/:id')
+  async deleteCredential(
+    @CurrentUser() user: User,
+    @Param('id') credId: string,
+  ): Promise<{ success: boolean }> {
+    await this.authService.deleteCredential(user.id, credId);
+    return { success: true };
   }
 }

@@ -12,7 +12,9 @@ async function addAdmin() {
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword) {
-    console.error('❌ Error: ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env');
+    console.error(
+      '❌ Error: ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env',
+    );
     console.error('Example:');
     console.error('  ADMIN_EMAIL=admin@example.com');
     console.error('  ADMIN_PASSWORD=your-secure-password');
@@ -39,7 +41,7 @@ async function addAdmin() {
 
     if (user) {
       console.log(`👤 User found: ${user.email}`);
-      
+
       if (user.role === UserRole.ADMIN) {
         console.log('✅ User is already an admin. No changes needed.');
       } else {
@@ -52,14 +54,14 @@ async function addAdmin() {
     } else {
       // Create new admin user
       console.log(`👤 User not found. Creating new admin user...`);
-      
+
       const passwordHash = await bcrypt.hash(adminPassword, 12);
-      
+
       // Generate a simple display name from email (user can change it later)
       const displayNameBase = normalizedEmail.split('@')[0].slice(0, 27); // Leave room for uniqueness
       let displayName = displayNameBase;
       let suffix = 0;
-      
+
       // Ensure display name is unique
       while (await userRepository.findOne({ where: { displayName } })) {
         suffix++;
