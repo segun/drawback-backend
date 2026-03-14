@@ -71,6 +71,16 @@ jobs:
       WEBAUTHN_ORIGIN: https://drawback.chat,http://localhost:3000
       ADMIN_EMAIL: admin@drawback.chat
       ADMIN_PASSWORD: adminpassword
+      GOOGLE_APPLICATION_CREDENTIALS: credentials.json
+      GOOGLE_CLOUD_PROJECT_ID: bustling-tree-274117
+      GOOGLE_PUBSUB_SUBSCRIPTION: play-subscriptions-pull
+      GOOGLE_PACKAGE_NAME: chat.drawback.flutter
+      GOOGLE_SUBSCRIPTION_ID: discovery_unlock_forever
+
+      APPLE_BUNDLE_ID: chat.drawback.flutter
+      GOOGLE_SERVICE_ACCOUNT: subscription-validator@bustling-tree-274117.iam.gserviceaccount.com
+      APPLE_SHARED_SECRET: 8dcbb5caf1af3481df29c69d53f6295a3
+
 
     steps:
       - name: Checkout code
