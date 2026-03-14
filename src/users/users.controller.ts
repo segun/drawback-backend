@@ -34,7 +34,24 @@ export class UsersController {
 
   @Get('me')
   getMe(@CurrentUser() user: User) {
-    return user;
+    // Compute hasDiscoveryAccess dynamically
+    const now = new Date();
+    const hasDiscoveryAccess =
+      user.subscriptionEndDate &&
+      now < user.subscriptionEndDate &&
+      user.subscriptionStatus === 'active';
+
+    return {
+      ...user,
+      hasDiscoveryAccess, // Override with computed value
+      subscription: user.subscriptionEndDate
+        ? {
+            tier: user.subscriptionTier,
+            endDate: user.subscriptionEndDate,
+            autoRenew: user.subscriptionAutoRenew,
+          }
+        : null,
+    };
   }
 
   @Patch('me')

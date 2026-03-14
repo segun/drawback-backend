@@ -86,6 +86,33 @@ export class User {
   @Column({ type: 'datetime', nullable: true })
   deleteTokenExpiry!: Date | null;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  subscriptionPlatform!: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  subscriptionTier!: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  subscriptionStatus!: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  subscriptionStartDate!: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  subscriptionEndDate!: Date | null;
+
+  @Column({ default: false })
+  @Transform(({ value }) => Boolean(value))
+  subscriptionAutoRenew!: boolean;
+
+  @Exclude()
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  originalTransactionId!: string | null;
+
+  @Exclude()
+  @Column({ type: 'text', nullable: true })
+  purchaseToken!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

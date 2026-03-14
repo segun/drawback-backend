@@ -5,5 +5,8 @@ export class VerifyReceiptDto {
   platform!: 'ios' | 'android';
 
   @IsString()
-  receipt!: string;
+  receipt!: string; // Purchase token for Android, receipt data for iOS
+
+  @IsString()
+  productId!: string; // Base plan ID (monthly, quarterly, yearly)
 }
