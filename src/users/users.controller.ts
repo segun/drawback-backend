@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { instanceToPlain } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthService } from '../auth/auth.service';
@@ -41,8 +42,11 @@ export class UsersController {
       now < user.subscriptionEndDate &&
       user.subscriptionStatus === 'active';
 
+    // Use instanceToPlain to properly apply @Exclude() decorators
+    const plainUser = instanceToPlain(user) as Record<string, unknown>;
+
     return {
-      ...user,
+      ...plainUser,
       hasDiscoveryAccess, // Override with computed value
       subscription: user.subscriptionEndDate
         ? {
