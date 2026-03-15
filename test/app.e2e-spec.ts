@@ -22,6 +22,7 @@ import { ChatModule } from './../src/chat/chat.module';
 import { MailService } from './../src/mail/mail.service';
 import { UserBlock } from './../src/users/entities/user-block.entity';
 import { User } from './../src/users/entities/user.entity';
+import { Subscription } from './../src/users/entities/subscription.entity';
 import { UserMode } from './../src/users/enums/user-mode.enum';
 import { UsersModule } from './../src/users/users.module';
 import { SavedChat } from './../src/chat/entities/saved-chat.entity';
@@ -171,6 +172,23 @@ const credentialsRepo = {
   remove: jest.fn().mockResolvedValue({}),
 };
 
+const subscriptionsRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'sub-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'sub-new',
+    }),
+  ),
+  update: jest.fn().mockResolvedValue({}),
+  remove: jest.fn().mockResolvedValue({}),
+};
+
 /** Gateway mock – prevents Socket.IO from starting */
 const gatewayMock = {
   notifyChatRequested: jest.fn(),
@@ -217,6 +235,8 @@ describe('Drawback API (e2e)', () => {
       .useValue(savedChatsRepo)
       .overrideProvider(getRepositoryToken(SessionEvent))
       .useValue(sessionEventsRepo)
+      .overrideProvider(getRepositoryToken(Subscription))
+      .useValue(subscriptionsRepo)
       .overrideProvider(CacheService)
       .useValue({
         get: jest.fn(),
@@ -325,6 +345,10 @@ describe('Drawback API (e2e)', () => {
 
     it('GET /users/me → returns profile without sensitive fields', async () => {
       usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
+      
+      // Return proper User instance for findOneWithSubscription
+      const aliceWithSub = Object.assign(new User(), { ...alice, subscription: null });
+      usersRepo.findOne.mockResolvedValueOnce(aliceWithSub);
 
       const res = await request(app.getHttpServer())
         .get('/users/me')

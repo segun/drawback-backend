@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { google } from 'googleapis';
 import { User } from '../users/entities/user.entity';
+import { Subscription } from '../users/entities/subscription.entity';
 
 export interface SubscriptionDetails {
   tier: string;
@@ -24,6 +25,8 @@ export class PurchasesService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -103,18 +106,39 @@ export class PurchasesService {
       // productId is the base plan ID: 'monthly', 'quarterly', or 'yearly'
       const tier = productId; // Use the base plan ID directly
 
-      // 7. Update user in database
-      await this.userRepository.update(userId, {
-        subscriptionPlatform: 'android',
-        subscriptionTier: tier,
-        subscriptionStatus: 'active',
-        subscriptionStartDate: startTime,
-        subscriptionEndDate: endTime,
-        subscriptionAutoRenew: isAutoRenewing,
-        originalTransactionId: subscription.orderId || null,
-        purchaseToken: receipt,
-        hasDiscoveryAccess: true, // Grant discovery access
+      // 7. Upsert subscription record (update if exists, create if not)
+      const existingSubscription = await this.subscriptionRepository.findOne({
+        where: { user: { id: userId } },
       });
+
+      if (existingSubscription) {
+        // Update existing subscription
+        await this.subscriptionRepository.update(existingSubscription.id, {
+          platform: 'android',
+          tier,
+          status: 'active',
+          startDate: startTime,
+          endDate: endTime,
+          autoRenew: isAutoRenewing,
+          originalTransactionId: subscription.orderId || null,
+          purchaseToken: receipt,
+        });
+      } else {
+        // Create new subscription
+        await this.subscriptionRepository.save({
+          userId,
+          platform: 'android',
+          tier,
+          status: 'active',
+          startDate: startTime,
+          endDate: endTime,
+          autoRenew: isAutoRenewing,
+          originalTransactionId: subscription.orderId || null,
+          purchaseToken: receipt,
+        });
+      }
+
+      await this.userRepository.update(userId, { hasDiscoveryAccess: true });
 
       this.logger.log(
         `Successfully verified Android subscription for user ${userId}: ${tier}`,

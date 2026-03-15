@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { PubSub, Message } from '@google-cloud/pubsub';
 import { google } from 'googleapis';
 import { User } from '../users/entities/user.entity';
+import { Subscription } from '../users/entities/subscription.entity';
 
 export enum SubscriptionNotificationType {
   SUBSCRIPTION_RECOVERED = 1,
@@ -40,6 +41,8 @@ export class SubscriptionEventsService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepository: Repository<Subscription>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -144,53 +147,55 @@ export class SubscriptionEventsService implements OnModuleInit {
   }) {
     const { notificationType, purchaseToken, subscriptionId } = notification;
 
-    // Find user with this purchase token
-    const user = await this.userRepository.findOne({
+    // Find subscription with this purchase token
+    const subscription = await this.subscriptionRepository.findOne({
       where: { purchaseToken },
+      relations: ['user'],
     });
 
-    if (!user) {
+    if (!subscription) {
       this.logger.error(
-        `User not found for purchase token: ${purchaseToken.substring(0, 10)}...`,
+        `Subscription not found for purchase token: ${purchaseToken.substring(0, 10)}...`,
       );
       return;
     }
 
+    const user = subscription.user;
     this.logger.log(
       `Processing notification type ${notificationType} for user ${user.id}`,
     );
 
     switch (notificationType) {
       case SubscriptionNotificationType.SUBSCRIPTION_RENEWED as number:
-        await this.handleRenewed(user, subscriptionId, purchaseToken);
+        await this.handleRenewed(subscription, subscriptionId, purchaseToken);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_CANCELED as number:
-        await this.handleCanceled(user);
+        await this.handleCanceled(subscription);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_EXPIRED as number:
-        await this.handleExpired(user);
+        await this.handleExpired(subscription);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_IN_GRACE_PERIOD as number:
-        await this.handleGracePeriod(user);
+        await this.handleGracePeriod(subscription);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_ON_HOLD as number:
-        await this.handleOnHold(user);
+        await this.handleOnHold(subscription);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_RECOVERED as number:
-        await this.handleRecovered(user, subscriptionId, purchaseToken);
+        await this.handleRecovered(subscription, subscriptionId, purchaseToken);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_RESTARTED as number:
-        await this.handleRestarted(user, subscriptionId, purchaseToken);
+        await this.handleRestarted(subscription, subscriptionId, purchaseToken);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_REVOKED as number:
-        await this.handleRevoked(user);
+        await this.handleRevoked(subscription);
         break;
 
       case SubscriptionNotificationType.SUBSCRIPTION_PURCHASED as number:
@@ -204,7 +209,7 @@ export class SubscriptionEventsService implements OnModuleInit {
   }
 
   private async handleRenewed(
-    user: User,
+    subscription: Subscription,
     subscriptionId: string,
     purchaseToken: string,
   ) {
@@ -228,101 +233,105 @@ export class SubscriptionEventsService implements OnModuleInit {
         token: purchaseToken,
       });
 
-      const subscription = result.data;
-      const newEndTime = new Date(parseInt(subscription.expiryTimeMillis!));
-      const isAutoRenewing = subscription.autoRenewing === true;
+      const googleSub = result.data;
+      const newEndTime = new Date(parseInt(googleSub.expiryTimeMillis!));
+      const isAutoRenewing = googleSub.autoRenewing === true;
 
-      await this.userRepository.update(user.id, {
-        subscriptionEndDate: newEndTime,
-        subscriptionStatus: 'active',
-        subscriptionAutoRenew: isAutoRenewing,
+      await this.subscriptionRepository.update(subscription.id, {
+        endDate: newEndTime,
+        status: 'active',
+        autoRenew: isAutoRenewing,
       });
 
       this.logger.log(
-        `Subscription renewed for user ${user.id} until ${newEndTime.toISOString()}`,
+        `Subscription renewed for user ${subscription.userId} until ${newEndTime.toISOString()}`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to update renewed subscription for user ${user.id}:`,
+        `Failed to update renewed subscription for user ${subscription.userId}:`,
         error,
       );
     }
   }
 
-  private async handleCanceled(user: User) {
-    await this.userRepository.update(user.id, {
-      subscriptionStatus: 'cancelled',
-      subscriptionAutoRenew: false,
+  private async handleCanceled(subscription: Subscription) {
+    await this.subscriptionRepository.update(subscription.id, {
+      status: 'cancelled',
+      autoRenew: false,
     });
 
-    // TypeORM returns Date | null for datetime columns
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const endDate = user.subscriptionEndDate as Date | null;
-    const expiryDate =
-      endDate && endDate instanceof Date ? endDate.toISOString() : 'unknown';
+    const expiryDate = subscription.endDate
+      ? subscription.endDate.toISOString()
+      : 'unknown';
     this.logger.log(
-      `Subscription cancelled for user ${user.id}. Will expire at: ${expiryDate}`,
+      `Subscription cancelled for user ${subscription.userId}. Will expire at: ${expiryDate}`,
     );
   }
 
-  private async handleExpired(user: User) {
-    await this.userRepository.update(user.id, {
-      subscriptionStatus: 'expired',
+  private async handleExpired(subscription: Subscription) {
+    await this.subscriptionRepository.update(subscription.id, {
+      status: 'expired',
+    });
+
+    await this.userRepository.update(subscription.userId, {
       hasDiscoveryAccess: false,
     });
 
-    this.logger.log(`Subscription expired for user ${user.id}`);
+    this.logger.log(`Subscription expired for user ${subscription.userId}`);
   }
 
-  private async handleGracePeriod(user: User) {
-    await this.userRepository.update(user.id, {
-      subscriptionStatus: 'grace_period',
+  private async handleGracePeriod(subscription: Subscription) {
+    await this.subscriptionRepository.update(subscription.id, {
+      status: 'grace_period',
     });
 
     this.logger.log(
-      `Subscription in grace period for user ${user.id}. Access maintained.`,
+      `Subscription in grace period for user ${subscription.userId}. Access maintained.`,
     );
   }
 
-  private async handleOnHold(user: User) {
-    await this.userRepository.update(user.id, {
-      subscriptionStatus: 'on_hold',
+  private async handleOnHold(subscription: Subscription) {
+    await this.subscriptionRepository.update(subscription.id, {
+      status: 'on_hold',
     });
 
     this.logger.log(
-      `Subscription on hold for user ${user.id}. Access maintained temporarily.`,
+      `Subscription on hold for user ${subscription.userId}. Access maintained temporarily.`,
     );
   }
 
   private async handleRecovered(
-    user: User,
+    subscription: Subscription,
     subscriptionId: string,
     purchaseToken: string,
   ) {
     // Same as renewed - fetch latest details
-    await this.handleRenewed(user, subscriptionId, purchaseToken);
-    this.logger.log(`Subscription recovered for user ${user.id}`);
+    await this.handleRenewed(subscription, subscriptionId, purchaseToken);
+    this.logger.log(`Subscription recovered for user ${subscription.userId}`);
   }
 
   private async handleRestarted(
-    user: User,
+    subscription: Subscription,
     subscriptionId: string,
     purchaseToken: string,
   ) {
     // Same as renewed - fetch latest details
-    await this.handleRenewed(user, subscriptionId, purchaseToken);
-    this.logger.log(`Subscription restarted for user ${user.id}`);
+    await this.handleRenewed(subscription, subscriptionId, purchaseToken);
+    this.logger.log(`Subscription restarted for user ${subscription.userId}`);
   }
 
-  private async handleRevoked(user: User) {
-    await this.userRepository.update(user.id, {
-      subscriptionStatus: 'revoked',
-      subscriptionAutoRenew: false,
+  private async handleRevoked(subscription: Subscription) {
+    await this.subscriptionRepository.update(subscription.id, {
+      status: 'revoked',
+      autoRenew: false,
+    });
+
+    await this.userRepository.update(subscription.userId, {
       hasDiscoveryAccess: false,
     });
 
     this.logger.log(
-      `Subscription revoked for user ${user.id}. Access removed.`,
+      `Subscription revoked for user ${subscription.userId}. Access removed.`,
     );
   }
 }

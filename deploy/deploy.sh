@@ -103,7 +103,12 @@ yarn install
 
 # Build application
 log_info "Building backend application..."
-yarn build
+# Set Node memory limit for TypeScript compilation on low-spec servers
+NODE_OPTIONS="--max-old-space-size=2048" yarn build || {
+    log_error "Build failed. This may be due to low memory."
+    log_error "Try manually: NODE_OPTIONS=\"--max-old-space-size=1024\" yarn build"
+    exit 1
+}
 
 # Start infrastructure services
 if is_true "$AUTO_START_DOCKER_SERVICES"; then

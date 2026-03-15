@@ -34,25 +34,28 @@ export class UsersController {
   ) {}
 
   @Get('me')
-  getMe(@CurrentUser() user: User) {
-    // Compute hasDiscoveryAccess dynamically
+  async getMe(@CurrentUser() user: User) {
+    // Load subscription relation
+    const userWithSub = await this.usersService.findOneWithSubscription(user.id);
+    
+    // Compute hasDiscoveryAccess dynamically based on subscription
     const now = new Date();
     const hasDiscoveryAccess =
-      user.subscriptionEndDate &&
-      now < user.subscriptionEndDate &&
-      user.subscriptionStatus === 'active';
+      userWithSub?.subscription?.endDate &&
+      now < userWithSub.subscription.endDate &&
+      userWithSub.subscription.status === 'active';
 
     // Use instanceToPlain to properly apply @Exclude() decorators
-    const plainUser = instanceToPlain(user) as Record<string, unknown>;
+    const plainUser = instanceToPlain(userWithSub) as Record<string, unknown>;
 
     return {
       ...plainUser,
       hasDiscoveryAccess, // Override with computed value
-      subscription: user.subscriptionEndDate
+      subscription: userWithSub?.subscription
         ? {
-            tier: user.subscriptionTier,
-            endDate: user.subscriptionEndDate,
-            autoRenew: user.subscriptionAutoRenew,
+            tier: userWithSub.subscription.tier,
+            endDate: userWithSub.subscription.endDate,
+            autoRenew: userWithSub.subscription.autoRenew,
           }
         : null,
     };

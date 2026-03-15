@@ -41,6 +41,17 @@ export class UsersService {
     return user;
   }
 
+  async findOneWithSubscription(id: string): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: ['subscription'],
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
+
   async findByDisplayName(displayName: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { displayName: displayName.toLowerCase() },
