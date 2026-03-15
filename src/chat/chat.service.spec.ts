@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ForbiddenException,
-  NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -136,12 +135,10 @@ describe('ChatService', () => {
       );
     });
 
-    it('throws NotFoundException when target user does not exist', async () => {
+    it('returns null when target user does not exist', async () => {
       usersService.findByDisplayName.mockResolvedValue(null);
 
-      await expect(service.createRequest('user-1', dto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.createRequest('user-1', dto)).resolves.toBeNull();
     });
 
     it('throws ForbiddenException when blocked', async () => {
@@ -362,12 +359,12 @@ describe('ChatService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('throws NotFoundException when saved chat not found', async () => {
+    it('returns false when saved chat not found', async () => {
       savedChatsRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.deleteSavedChat('missing', 'user-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteSavedChat('missing', 'user-1')).resolves.toBe(
+        false,
+      );
     });
   });
 
@@ -390,12 +387,12 @@ describe('ChatService', () => {
       expect(chatRequestRepo.remove).toHaveBeenCalledWith(acceptedReq);
     });
 
-    it('throws NotFoundException when request not found', async () => {
+    it('returns false when request not found', async () => {
       chatRequestRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.removeAcceptedChat('missing', 'user-1'),
-      ).rejects.toThrow(NotFoundException);
+      ).resolves.toBe(false);
     });
 
     it('throws ForbiddenException when user is not part of chat', async () => {

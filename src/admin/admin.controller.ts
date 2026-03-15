@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -65,8 +66,13 @@ export class AdminController {
   }
 
   @Get('users/details/:userId')
-  getUserDetails(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.adminService.getUserDetails(userId);
+  async getUserDetails(@Param('userId', ParseUUIDPipe) userId: string) {
+    const user = await this.adminService.getUserDetails(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 
   @Post('users/ban')

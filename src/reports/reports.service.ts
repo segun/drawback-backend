@@ -97,17 +97,11 @@ export class ReportsService {
     return await queryBuilder.getMany();
   }
 
-  async findReportById(reportId: string): Promise<Report> {
-    const report = await this.reportRepository.findOne({
+  async findReportById(reportId: string): Promise<Report | null> {
+    return this.reportRepository.findOne({
       where: { id: reportId },
       relations: ['reporter', 'reportedUser', 'resolver'],
     });
-
-    if (!report) {
-      throw new NotFoundException('Report not found');
-    }
-
-    return report;
   }
 
   async updateReportStatus(
@@ -116,6 +110,9 @@ export class ReportsService {
     dto: UpdateReportStatusDto,
   ): Promise<Report> {
     const report = await this.findReportById(reportId);
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
 
     report.status = dto.status;
     if (dto.adminNotes !== undefined) {
@@ -140,6 +137,10 @@ export class ReportsService {
 
   async deleteReport(reportId: string): Promise<void> {
     const report = await this.findReportById(reportId);
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
     await this.reportRepository.remove(report);
   }
 

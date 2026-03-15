@@ -156,15 +156,10 @@ describe('ReportsService', () => {
       expect(result).toEqual(mockReport);
     });
 
-    it('should throw NotFoundException if report not found', async () => {
+    it('should return null if report not found', async () => {
       reportRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findReportById('nonexistent')).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.findReportById('nonexistent')).rejects.toThrow(
-        'Report not found',
-      );
+      await expect(service.findReportById('nonexistent')).resolves.toBeNull();
     });
   });
 

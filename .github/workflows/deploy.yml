@@ -35,6 +35,10 @@ jobs:
           --health-retries=5
 
     env:
+      # Opt-in to running GitHub Actions tool code on Node.js 24 (default after 2026-06-02).
+      # This helps surface compatibility issues early (vs being forced into Node 24 later).
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_USER: root

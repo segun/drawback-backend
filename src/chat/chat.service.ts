@@ -33,12 +33,16 @@ export class ChatService {
   async createRequest(
     fromUserId: string,
     dto: CreateChatRequestDto,
-  ): Promise<ChatRequest> {
+  ): Promise<ChatRequest | null> {
     const fromUser = await this.usersService.findById(fromUserId);
+    if (!fromUser) {
+      throw new NotFoundException('User not found');
+    }
+
     const toUser = await this.usersService.findByDisplayName(dto.toDisplayName);
 
     if (!toUser) {
-      throw new NotFoundException('Target user not found');
+      return null;
     }
 
     if (toUser.id === fromUser.id) {
@@ -107,13 +111,13 @@ export class ChatService {
     requestId: string,
     responderUserId: string,
     dto: RespondChatRequestDto,
-  ): Promise<{ request: ChatRequest; roomId: string | null }> {
+  ): Promise<{ request: ChatRequest; roomId: string | null } | null> {
     const request = await this.chatRequestRepository.findOne({
       where: { id: requestId },
     });
 
     if (!request) {
-      throw new NotFoundException('Chat request not found');
+      return null;
     }
 
     if (request.toUserId !== responderUserId) {
@@ -160,13 +164,13 @@ export class ChatService {
     return { request: savedRequest, roomId };
   }
 
-  async cancelRequest(requestId: string, userId: string): Promise<void> {
+  async cancelRequest(requestId: string, userId: string): Promise<boolean> {
     const request = await this.chatRequestRepository.findOne({
       where: { id: requestId },
     });
 
     if (!request) {
-      throw new NotFoundException('Chat request not found');
+      return false;
     }
 
     if (request.fromUserId !== userId) {
@@ -178,18 +182,19 @@ export class ChatService {
     }
 
     await this.chatRequestRepository.remove(request);
+    return true;
   }
 
   async getAcceptedRoomForUser(
     requestId: string,
     userId: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
     const request = await this.chatRequestRepository.findOne({
       where: { id: requestId },
     });
 
     if (!request) {
-      throw new NotFoundException('Chat request not found');
+      return null;
     }
 
     if (request.fromUserId !== userId && request.toUserId !== userId) {
@@ -238,13 +243,13 @@ export class ChatService {
       : request.fromUserId;
   }
 
-  async saveChat(requestId: string, userId: string): Promise<SavedChat> {
+  async saveChat(requestId: string, userId: string): Promise<SavedChat | null> {
     const request = await this.chatRequestRepository.findOne({
       where: { id: requestId },
     });
 
     if (!request) {
-      throw new NotFoundException('Chat request not found');
+      return null;
     }
 
     if (request.fromUserId !== userId && request.toUserId !== userId) {
@@ -276,13 +281,13 @@ export class ChatService {
     });
   }
 
-  async deleteSavedChat(savedChatId: string, userId: string): Promise<void> {
+  async deleteSavedChat(savedChatId: string, userId: string): Promise<boolean> {
     const saved = await this.savedChatsRepository.findOne({
       where: { id: savedChatId },
     });
 
     if (!saved) {
-      throw new NotFoundException('Saved chat not found');
+      return false;
     }
 
     if (saved.savedByUserId !== userId) {
@@ -290,15 +295,19 @@ export class ChatService {
     }
 
     await this.savedChatsRepository.remove(saved);
+    return true;
   }
 
-  async removeAcceptedChat(requestId: string, userId: string): Promise<void> {
+  async removeAcceptedChat(
+    requestId: string,
+    userId: string,
+  ): Promise<boolean> {
     const request = await this.chatRequestRepository.findOne({
       where: { id: requestId },
     });
 
     if (!request) {
-      throw new NotFoundException('Chat request not found');
+      return false;
     }
 
     if (request.fromUserId !== userId && request.toUserId !== userId) {
@@ -314,6 +323,7 @@ export class ChatService {
     await this.drawGateway.forceCloseRoom(roomId);
 
     await this.chatRequestRepository.remove(request);
+    return true;
   }
 
   /**

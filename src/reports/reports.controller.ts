@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto/create-report.dto';
@@ -49,7 +50,12 @@ export class ReportsController {
   @Get('admin/:id')
   @UseGuards(AdminGuard)
   async getReportById(@Param('id') reportId: string) {
-    return await this.reportsService.findReportById(reportId);
+    const report = await this.reportsService.findReportById(reportId);
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    return report;
   }
 
   @Patch('admin/:id')

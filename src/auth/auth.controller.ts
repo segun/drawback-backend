@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Redirect,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -103,14 +104,24 @@ export class AuthController {
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto) {
+    const result = await this.authService.login(dto);
+    if (!result) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return result;
   }
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @Post('login-and-delete')
-  loginAndDelete(@Body() dto: LoginDto): Promise<{ message: string }> {
-    return this.authService.loginAndDelete(dto);
+  async loginAndDelete(@Body() dto: LoginDto): Promise<{ message: string }> {
+    const result = await this.authService.loginAndDelete(dto);
+    if (!result) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return result;
   }
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
@@ -155,18 +166,31 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Throttle({ auth: { ttl: 60000, limit: 10 } })
   @Post('passkey/register/start')
-  startPasskeyRegistration(@CurrentUser() user: User) {
-    return this.authService.startPasskeyRegistration(user.id);
+  async startPasskeyRegistration(@CurrentUser() user: User) {
+    const options = await this.authService.startPasskeyRegistration(user.id);
+    if (!options) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return options;
   }
 
   @UseGuards(JwtAuthGuard)
   @Throttle({ auth: { ttl: 60000, limit: 10 } })
   @Post('passkey/register/finish')
-  finishPasskeyRegistration(
+  async finishPasskeyRegistration(
     @CurrentUser() user: User,
     @Body() dto: FinishPasskeyRegistrationDto,
   ) {
-    return this.authService.finishPasskeyRegistration(user.id, dto);
+    const result = await this.authService.finishPasskeyRegistration(
+      user.id,
+      dto,
+    );
+    if (!result) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return result;
   }
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
@@ -177,8 +201,13 @@ export class AuthController {
 
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @Post('passkey/login/finish')
-  finishPasskeyLogin(@Body() dto: FinishPasskeyLoginDto) {
-    return this.authService.finishPasskeyLogin(dto);
+  async finishPasskeyLogin(@Body() dto: FinishPasskeyLoginDto) {
+    const result = await this.authService.finishPasskeyLogin(dto);
+    if (!result) {
+      throw new UnauthorizedException('Invalid passkey');
+    }
+
+    return result;
   }
 
   // ===== Passkey Credential Management =====
@@ -197,7 +226,11 @@ export class AuthController {
     @CurrentUser() user: User,
     @Param('id') credId: string,
   ): Promise<{ success: boolean }> {
-    await this.authService.deleteCredential(user.id, credId);
+    const deleted = await this.authService.deleteCredential(user.id, credId);
+    if (!deleted) {
+      throw new BadRequestException('Passkey not found');
+    }
+
     return { success: true };
   }
 }

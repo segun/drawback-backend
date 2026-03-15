@@ -98,12 +98,10 @@ describe('UsersService', () => {
       await expect(service.findById('user-1')).resolves.toEqual(user);
     });
 
-    it('throws NotFoundException when not found', async () => {
+    it('returns null when not found', async () => {
       usersRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('missing')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findById('missing')).resolves.toBeNull();
     });
   });
 

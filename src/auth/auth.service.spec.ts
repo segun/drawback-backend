@@ -204,14 +204,14 @@ describe('AuthService', () => {
     it('throws UnauthorizedException when user not found', async () => {
       usersRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(dto)).resolves.toBeNull();
     });
 
     it('throws UnauthorizedException on wrong password', async () => {
       usersRepo.findOne.mockResolvedValue(mockUser() as User);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(dto)).resolves.toBeNull();
     });
 
     it('throws UnauthorizedException when account not activated', async () => {

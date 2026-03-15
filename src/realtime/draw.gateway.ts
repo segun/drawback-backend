@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Inject,
   Logger,
+  NotFoundException,
   OnModuleDestroy,
   UnauthorizedException,
   UsePipes,
@@ -242,7 +243,7 @@ export class DrawGateway
     ]);
 
     // Log session event for CSAE compliance
-    this.sessionEventsService.logEvent(
+    void this.sessionEventsService.logEvent(
       userId,
       SessionEventType.CONNECT,
       ipAddress,
@@ -289,7 +290,7 @@ export class DrawGateway
     }
 
     // Log session event for CSAE compliance
-    this.sessionEventsService.logEvent(
+    void this.sessionEventsService.logEvent(
       userId,
       SessionEventType.DISCONNECT,
       undefined,
@@ -365,6 +366,10 @@ export class DrawGateway
         dto.requestId,
         userId,
       );
+      if (!roomId) {
+        this.emitError(client, new NotFoundException('Chat request not found'));
+        return;
+      }
 
       // leave any previous room first
       const prevRoom = this.socketToRoom.get(client.id);
@@ -413,7 +418,7 @@ export class DrawGateway
         /^::ffff:/,
         '',
       );
-      this.sessionEventsService.logEvent(
+      void this.sessionEventsService.logEvent(
         userId,
         SessionEventType.CHAT_JOINED,
         ipAddress,
@@ -462,7 +467,7 @@ export class DrawGateway
 
       // Log session event for CSAE compliance
       if (userId) {
-        this.sessionEventsService.logEvent(
+        void this.sessionEventsService.logEvent(
           userId,
           SessionEventType.CHAT_LEFT,
           undefined,

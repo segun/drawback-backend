@@ -196,12 +196,12 @@ describe('AuthService - Passkey Tests', () => {
       expect(result.challenge).toBe('test-challenge-123');
     });
 
-    it('should throw UnauthorizedException if user not found', async () => {
+    it('should return null if user not found', async () => {
       usersRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.startPasskeyRegistration('nonexistent'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).resolves.toBeNull();
     });
 
     it('should throw UnauthorizedException if user not activated', async () => {
@@ -502,12 +502,12 @@ describe('AuthService - Passkey Tests', () => {
       expect(credentialsRepo.remove).toHaveBeenCalledWith(mockCredential);
     });
 
-    it('should throw if credential not found', async () => {
+    it('should return false if credential not found', async () => {
       credentialsRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.deleteCredential('user-123', 'nonexistent'),
-      ).rejects.toThrow(new BadRequestException('Passkey not found'));
+      ).resolves.toBe(false);
     });
 
     it('should prevent deletion of last passkey without password', async () => {

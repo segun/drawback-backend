@@ -266,18 +266,18 @@ export class AuthService {
 
   async login(
     dto: LoginDto,
-  ): Promise<{ accessToken: string; canAddPasskey?: boolean }> {
+  ): Promise<{ accessToken: string; canAddPasskey?: boolean } | null> {
     const user = await this.usersRepository.findOne({
       where: { email: dto.email.toLowerCase() },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      return null;
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+      return null;
     }
 
     if (!user.isActivated) {
@@ -311,13 +311,15 @@ export class AuthService {
   /** How long (hours) a delete-account token remains valid. */
   static readonly DELETE_TOKEN_TTL_HOURS = 24;
 
-  async requestAccountDeletion(userId: string): Promise<{ message: string }> {
+  async requestAccountDeletion(
+    userId: string,
+  ): Promise<{ message: string } | null> {
     const user = await this.usersRepository.findOne({
       where: { id: userId },
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      return null;
     }
 
     // Generate deletion token and send email
@@ -340,22 +342,27 @@ export class AuthService {
     };
   }
 
-  async loginAndDelete(dto: LoginDto): Promise<{ message: string }> {
+  async loginAndDelete(dto: LoginDto): Promise<{ message: string } | null> {
     const user = await this.usersRepository.findOne({
       where: { email: dto.email.toLowerCase() },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      return null;
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+      return null;
     }
 
     // Use the shared method to request deletion
-    return this.requestAccountDeletion(user.id);
+    const result = await this.requestAccountDeletion(user.id);
+    if (!result) {
+      return null;
+    }
+
+    return result;
   }
 
   async confirmDelete(
@@ -428,7 +435,7 @@ export class AuthService {
   async startPasskeyRegistration(userId: string) {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      return null;
     }
 
     if (!user.isActivated) {
@@ -476,10 +483,10 @@ export class AuthService {
   async finishPasskeyRegistration(
     userId: string,
     dto: FinishPasskeyRegistrationDto,
-  ): Promise<{ success: boolean }> {
+  ): Promise<{ success: boolean } | null> {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      return null;
     }
 
     const expectedChallenge = await this.getChallenge(userId);
@@ -641,7 +648,7 @@ export class AuthService {
    */
   async finishPasskeyLogin(
     dto: FinishPasskeyLoginDto,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<{ accessToken: string } | null> {
     // Extract user ID from the response (it's in the user handle)
     const credentialIdBuffer = Buffer.from(dto.data.id, 'base64url');
 
@@ -651,7 +658,7 @@ export class AuthService {
     });
 
     if (!credential) {
-      throw new UnauthorizedException('Invalid passkey');
+      return null;
     }
 
     const user = credential.user;
@@ -774,13 +781,13 @@ export class AuthService {
    * Delete a specific passkey for a user.
    * Prevents deletion of last passkey if user has no password.
    */
-  async deleteCredential(userId: string, credentialId: string): Promise<void> {
+  async deleteCredential(userId: string, credentialId: string): Promise<boolean> {
     const credential = await this.credentialsRepository.findOne({
       where: { id: credentialId, userId },
     });
 
     if (!credential) {
-      throw new BadRequestException('Passkey not found');
+      return false;
     }
 
     // Prevent deleting last passkey if user has no password (account lockout protection)
@@ -797,5 +804,6 @@ export class AuthService {
 
     await this.credentialsRepository.remove(credential);
     this.logger.log(`Passkey ${credentialId} deleted for user ${userId}`);
+    return true;
   }
 }

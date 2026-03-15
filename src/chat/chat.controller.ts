@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -25,8 +26,16 @@ export class ChatController {
   // ── Requests ────────────────────────────────────────────────────────────
 
   @Post('requests')
-  createRequest(@CurrentUser() user: User, @Body() dto: CreateChatRequestDto) {
-    return this.chatService.createRequest(user.id, dto);
+  async createRequest(
+    @CurrentUser() user: User,
+    @Body() dto: CreateChatRequestDto,
+  ) {
+    const request = await this.chatService.createRequest(user.id, dto);
+    if (!request) {
+      throw new NotFoundException('Target user not found');
+    }
+
+    return request;
   }
 
   @Get('requests/sent')
@@ -40,12 +49,21 @@ export class ChatController {
   }
 
   @Post('requests/:requestId/respond')
-  respond(
+  async respond(
     @CurrentUser() user: User,
     @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: RespondChatRequestDto,
   ) {
-    return this.chatService.respondToRequest(requestId, user.id, dto);
+    const result = await this.chatService.respondToRequest(
+      requestId,
+      user.id,
+      dto,
+    );
+    if (!result) {
+      throw new NotFoundException('Chat request not found');
+    }
+
+    return result;
   }
 
   @Delete('requests/:requestId')
@@ -54,7 +72,10 @@ export class ChatController {
     @CurrentUser() user: User,
     @Param('requestId', ParseUUIDPipe) requestId: string,
   ) {
-    await this.chatService.cancelRequest(requestId, user.id);
+    const cancelled = await this.chatService.cancelRequest(requestId, user.id);
+    if (!cancelled) {
+      throw new NotFoundException('Chat request not found');
+    }
   }
 
   @Delete('requests/:requestId/remove')
@@ -63,17 +84,28 @@ export class ChatController {
     @CurrentUser() user: User,
     @Param('requestId', ParseUUIDPipe) requestId: string,
   ) {
-    await this.chatService.removeAcceptedChat(requestId, user.id);
+    const removed = await this.chatService.removeAcceptedChat(
+      requestId,
+      user.id,
+    );
+    if (!removed) {
+      throw new NotFoundException('Chat request not found');
+    }
   }
 
   // ── Saved chats ─────────────────────────────────────────────────────────
 
   @Post('requests/:requestId/save')
-  saveChat(
+  async saveChat(
     @CurrentUser() user: User,
     @Param('requestId', ParseUUIDPipe) requestId: string,
   ) {
-    return this.chatService.saveChat(requestId, user.id);
+    const savedChat = await this.chatService.saveChat(requestId, user.id);
+    if (!savedChat) {
+      throw new NotFoundException('Chat request not found');
+    }
+
+    return savedChat;
   }
 
   @Get('saved')
@@ -87,6 +119,12 @@ export class ChatController {
     @CurrentUser() user: User,
     @Param('savedChatId', ParseUUIDPipe) savedChatId: string,
   ) {
-    await this.chatService.deleteSavedChat(savedChatId, user.id);
+    const deleted = await this.chatService.deleteSavedChat(
+      savedChatId,
+      user.id,
+    );
+    if (!deleted) {
+      throw new NotFoundException('Saved chat not found');
+    }
   }
 }

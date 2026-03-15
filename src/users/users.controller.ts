@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  UnauthorizedException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -36,12 +38,17 @@ export class UsersController {
   @Get('me')
   async getMe(@CurrentUser() user: User) {
     // Load subscription relation
-    const userWithSub = await this.usersService.findOneWithSubscription(user.id);
-    
+    const userWithSub = await this.usersService.findOneWithSubscription(
+      user.id,
+    );
+    if (!userWithSub) {
+      throw new NotFoundException('User not found');
+    }
+
     // Compute hasDiscoveryAccess dynamically based on subscription
     const now = new Date();
     const hasDiscoveryAccess =
-      userWithSub?.subscription?.endDate &&
+      userWithSub.subscription?.endDate &&
       now < userWithSub.subscription.endDate &&
       userWithSub.subscription.status === 'active';
 
@@ -51,7 +58,7 @@ export class UsersController {
     return {
       ...plainUser,
       hasDiscoveryAccess, // Override with computed value
-      subscription: userWithSub?.subscription
+      subscription: userWithSub.subscription
         ? {
             tier: userWithSub.subscription.tier,
             endDate: userWithSub.subscription.endDate,
@@ -93,7 +100,12 @@ export class UsersController {
 
   @Delete('me')
   async deleteMe(@CurrentUser() user: User): Promise<{ message: string }> {
-    return this.authService.requestAccountDeletion(user.id);
+    const result = await this.authService.requestAccountDeletion(user.id);
+    if (!result) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return result;
   }
 
   @Get('public')

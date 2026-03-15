@@ -33,23 +33,15 @@ export class UsersService {
     private readonly storage: StorageService,
   ) {}
 
-  async findById(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return user;
+  async findById(id: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { id } });
   }
 
-  async findOneWithSubscription(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({
+  async findOneWithSubscription(id: string): Promise<User | null> {
+    return this.usersRepository.findOne({
       where: { id },
       relations: ['subscription'],
     });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return user;
   }
 
   async findByDisplayName(displayName: string): Promise<User | null> {
@@ -77,6 +69,10 @@ export class UsersService {
     dto: UpdateProfileDto,
   ): Promise<User> {
     const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     const normalised = dto.displayName.toLowerCase();
 
     const taken = await this.usersRepository.findOne({
@@ -92,12 +88,19 @@ export class UsersService {
 
   async setMode(userId: string, mode: UserMode): Promise<User> {
     const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     user.mode = mode;
     return this.usersRepository.save(user);
   }
 
   async deleteAccount(userId: string): Promise<void> {
     const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     // Close all active drawing rooms for this user
     await this.chatService.closeAllRoomsForUser(userId);
@@ -163,6 +166,10 @@ export class UsersService {
     appearInSearches: boolean,
   ): Promise<User> {
     const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     user.appearInSearches = appearInSearches;
     return this.usersRepository.save(user);
   }
@@ -172,7 +179,10 @@ export class UsersService {
       throw new BadRequestException('You cannot block yourself');
     }
 
-    await this.findById(blockedId); // ensure target exists
+    const blockedUser = await this.findById(blockedId);
+    if (!blockedUser) {
+      throw new NotFoundException('User not found');
+    }
 
     const existing = await this.blocksRepository.findOne({
       where: { blockerId, blockedId },
@@ -242,6 +252,9 @@ export class UsersService {
     base64Image?: string,
   ): Promise<User> {
     const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     if (appearInDiscoveryGame) {
       // Enabling discovery game — require image
