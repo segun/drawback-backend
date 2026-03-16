@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -126,6 +127,31 @@ export class UsersController {
   async getRandomDiscovery(
     @CurrentUser() user: User,
   ): Promise<{ user: DiscoveryUserResponseDto | null }> {
+    const userWithSub = await this.usersService.findOneWithSubscription(
+      user.id,
+    );
+
+    if (!userWithSub) {
+      throw new NotFoundException('User not found');
+    }
+
+    const subscription = userWithSub.subscription;
+    const now = new Date();
+    const hasSubscription =
+      !!subscription &&
+      (subscription.endDate > now ||
+        subscription.status === 'grace_period' ||
+        subscription.status === 'on_hold') &&
+      subscription.status !== 'expired' &&
+      subscription.status !== 'revoked';
+
+    if (!hasSubscription) {
+      throw new ForbiddenException({
+        error: 'DISCOVERY_LOCKED',
+        message: 'Discovery requires premium access',
+      });
+    }
+
     const randomUser = await this.usersService.getRandomDiscoveryUser(user);
     return { user: randomUser };
   }

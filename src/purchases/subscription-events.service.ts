@@ -153,10 +153,21 @@ export class SubscriptionEventsService implements OnModuleInit {
       relations: ['user'],
     });
 
+    // For new purchases, the subscription might not exist yet if the Pub/Sub notification
+    // arrived before the app called /verify-receipt. Just log and skip.
     if (!subscription) {
-      this.logger.error(
-        `Subscription not found for purchase token: ${purchaseToken.substring(0, 10)}...`,
-      );
+      if (
+        notificationType ===
+        (SubscriptionNotificationType.SUBSCRIPTION_PURCHASED as number)
+      ) {
+        this.logger.log(
+          `Received SUBSCRIPTION_PURCHASED notification for token ${purchaseToken.substring(0, 10)}... - will be handled by /verify-receipt endpoint`,
+        );
+      } else {
+        this.logger.error(
+          `Subscription not found for purchase token: ${purchaseToken.substring(0, 10)}...`,
+        );
+      }
       return;
     }
 

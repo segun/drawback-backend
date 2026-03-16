@@ -25,8 +25,8 @@ export class Subscription {
   @Column({ type: 'varchar', length: 20 })
   platform!: string; // 'ios' | 'android'
 
-  @Column({ type: 'varchar', length: 20 })
-  tier!: string; // 'monthly' | 'quarterly' | 'yearly'
+  @Column({ type: 'varchar', length: 50 })
+  tier!: string; // Product ID: 'monthly' | 'quarterly' | 'yearly' | 'discovery_unlock_forever'
 
   @Column({ type: 'varchar', length: 20 })
   status!: string; // 'active' | 'expired' | 'cancelled' | etc.

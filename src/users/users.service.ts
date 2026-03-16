@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -286,14 +285,6 @@ export class UsersService {
   async getRandomDiscoveryUser(
     currentUser: User,
   ): Promise<DiscoveryUserResponseDto | null> {
-    // Check if user has access to discovery feature
-    if (!currentUser.hasDiscoveryAccess) {
-      throw new ForbiddenException({
-        error: 'DISCOVERY_LOCKED',
-        message: 'Discovery requires premium access',
-      });
-    }
-
     // Query DB directly for a random discovery user, excluding current user
     // and users with whom there's already an active chat request
     const users = await this.usersRepository

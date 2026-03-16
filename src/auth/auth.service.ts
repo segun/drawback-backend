@@ -781,7 +781,10 @@ export class AuthService {
    * Delete a specific passkey for a user.
    * Prevents deletion of last passkey if user has no password.
    */
-  async deleteCredential(userId: string, credentialId: string): Promise<boolean> {
+  async deleteCredential(
+    userId: string,
+    credentialId: string,
+  ): Promise<boolean> {
     const credential = await this.credentialsRepository.findOne({
       where: { id: credentialId, userId },
     });
