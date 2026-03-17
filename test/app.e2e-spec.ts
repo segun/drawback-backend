@@ -345,9 +345,12 @@ describe('Drawback API (e2e)', () => {
 
     it('GET /users/me → returns profile without sensitive fields', async () => {
       usersRepo.findOne.mockResolvedValueOnce(alice); // jwt strategy
-      
+
       // Return proper User instance for findOneWithSubscription
-      const aliceWithSub = Object.assign(new User(), { ...alice, subscription: null });
+      const aliceWithSub = Object.assign(new User(), {
+        ...alice,
+        subscription: null,
+      });
       usersRepo.findOne.mockResolvedValueOnce(aliceWithSub);
 
       const res = await request(app.getHttpServer())

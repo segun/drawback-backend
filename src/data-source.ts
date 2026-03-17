@@ -6,6 +6,7 @@ import { Subscription } from './users/entities/subscription.entity';
 import { ChatRequest } from './chat/entities/chat-request.entity';
 import { SavedChat } from './chat/entities/saved-chat.entity';
 import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
+import { AppleNotification } from './purchases/entities/apple-notification.entity';
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -27,6 +28,7 @@ export default new DataSource({
     ChatRequest,
     SavedChat,
     AdminAuditLog,
+    AppleNotification,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class IncreaseSubscriptionTierLength1773600000000
-  implements MigrationInterface
-{
+export class IncreaseSubscriptionTierLength1773600000000 implements MigrationInterface {
   name = 'IncreaseSubscriptionTierLength1773600000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -1,12 +1,14 @@
-import { IsEnum, IsString } from 'class-validator';
+import { IsIn, IsString, IsNotEmpty } from 'class-validator';
 
 export class VerifyReceiptDto {
-  @IsEnum(['ios', 'android'])
+  @IsIn(['ios', 'android'])
   platform!: 'ios' | 'android';
 
   @IsString()
+  @IsNotEmpty()
   receipt!: string; // Purchase token for Android, receipt data for iOS
 
   @IsString()
-  productId!: string; // Base plan ID (monthly, quarterly, yearly)
+  @IsNotEmpty()
+  productId!: string; // Android: discovery_unlock_forever, iOS: monthly|quarterly|yearly
 }
