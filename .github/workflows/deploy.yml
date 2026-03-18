@@ -80,10 +80,13 @@ jobs:
       GOOGLE_PUBSUB_SUBSCRIPTION: play-subscriptions-pull
       GOOGLE_PACKAGE_NAME: chat.drawback.flutter
       GOOGLE_SUBSCRIPTION_ID: discovery_unlock_forever
+      GOOGLE_SERVICE_ACCOUNT: sac@gmail.com
 
       APPLE_BUNDLE_ID: chat.drawback.flutter
-      GOOGLE_SERVICE_ACCOUNT: subscription-validator@bustling-tree-274117.iam.gserviceaccount.com
       APPLE_SHARED_SECRET: 8dcbb5caf1af3481df29c69d53f6295a3
+      APPLE_KEY_ID: H71TL5MT3T
+      APPLE_ISSUER_ID: e1d9c8b0-1a2b-4c3d-9e4f-5g6h7i8j9k0l
+      APPLE_PRIVATE_KEY_PATH: src/purchases/config/SubscriptionKey_H71TL5MT3T.p8      
 
 
     steps:

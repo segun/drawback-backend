@@ -1,4 +1,4 @@
-import { IsEmail, IsObject, MaxLength } from 'class-validator';
+import { IsEmail, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -13,6 +13,16 @@ export class StartPasskeyLoginDto {
 export class FinishPasskeyRegistrationDto {
   @IsObject()
   data!: RegistrationResponseJSON;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  deviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  platform?: string;
 }
 
 export class FinishPasskeyLoginDto {
@@ -29,4 +39,6 @@ export class CredentialResponseDto {
   createdAt!: Date;
   lastUsedAt!: Date | null;
   transports!: string[] | null;
+  deviceId!: string | null;
+  platform!: string | null;
 }

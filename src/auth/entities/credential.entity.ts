@@ -38,6 +38,12 @@ export class Credential {
   @Column({ type: 'json', nullable: true })
   transports!: string[] | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  deviceId!: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  platform!: string | null;
+
   @Column({ type: 'datetime', nullable: true })
   lastUsedAt!: Date | null;
 

@@ -34,6 +34,7 @@ type MockedUsersRepo = {
   create: jest.Mock;
   save: jest.Mock;
   count: jest.Mock;
+  find: jest.Mock;
 };
 type MockedJwtService = { sign: jest.Mock };
 type MockedMailService = { sendActivationEmail: jest.Mock };
@@ -44,11 +45,13 @@ const repositoryMockFactory = (): MockedUsersRepo => ({
   create: jest.fn(),
   save: jest.fn(),
   count: jest.fn().mockResolvedValue(0),
+  find: jest.fn().mockResolvedValue([]),
 });
 
 describe('AuthService', () => {
   let service: AuthService;
   let usersRepo: MockedUsersRepo;
+  let credentialsRepo: MockedUsersRepo;
   let jwtService: MockedJwtService;
   let mailService: MockedMailService;
   let usersService: MockedUsersService;
@@ -100,6 +103,7 @@ describe('AuthService', () => {
 
     service = module.get(AuthService);
     usersRepo = module.get<MockedUsersRepo>(getRepositoryToken(User));
+    credentialsRepo = module.get<MockedUsersRepo>(getRepositoryToken(Credential));
     jwtService = module.get<MockedJwtService>(JwtService);
     mailService = module.get<MockedMailService>(MailService);
     usersService = module.get<MockedUsersService>(UsersService);
@@ -191,6 +195,7 @@ describe('AuthService', () => {
     it('returns accessToken for valid credentials', async () => {
       const user = mockUser() as User;
       usersRepo.findOne.mockResolvedValue(user);
+      credentialsRepo.find.mockResolvedValue([]);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       const result = await service.login(dto);
@@ -209,6 +214,7 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException on wrong password', async () => {
       usersRepo.findOne.mockResolvedValue(mockUser() as User);
+      credentialsRepo.find.mockResolvedValue([]);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(service.login(dto)).resolves.toBeNull();
@@ -219,6 +225,7 @@ describe('AuthService', () => {
         ...mockUser(),
         isActivated: false,
       } as User);
+      credentialsRepo.find.mockResolvedValue([]);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);

@@ -299,11 +299,16 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload);
 
-    // Check if user has any passkeys
-    const credentialCount = await this.credentialsRepository.count({
+    // Check if this specific device already has a passkey registered.
+    // If the client sends a deviceId, we check against it; otherwise we fall
+    // back to the old behaviour (prompt only when zero credentials exist).
+    const existingCredentials = await this.credentialsRepository.find({
       where: { userId: user.id },
+      select: ['id', 'deviceId'],
     });
-    const canAddPasskey = credentialCount === 0;
+    const canAddPasskey = dto.deviceId
+      ? !existingCredentials.some((c) => c.deviceId === dto.deviceId)
+      : existingCredentials.length === 0;
 
     return { accessToken, ...(canAddPasskey && { canAddPasskey: true }) };
   }
@@ -546,6 +551,8 @@ export class AuthService {
           publicKey: Buffer.from(credential.publicKey),
           counter: credential.counter,
           transports: credential.transports || null,
+          deviceId: (dto.deviceId ?? null) as string | null,
+          platform: (dto.platform ?? null) as string | null,
           lastUsedAt: new Date(), // Set to now to prevent cleanup
         });
         await transactionalEntityManager.save(newCredential);
@@ -761,6 +768,8 @@ export class AuthService {
       createdAt: Date;
       lastUsedAt: Date | null;
       transports: string[] | null;
+      deviceId: string | null;
+      platform: string | null;
     }>
   > {
     const credentials = await this.credentialsRepository.find({
@@ -773,6 +782,8 @@ export class AuthService {
       createdAt: cred.createdAt,
       lastUsedAt: cred.lastUsedAt,
       transports: cred.transports,
+      deviceId: cred.deviceId as string | null,
+      platform: cred.platform as string | null,
       // Don't expose credentialId, publicKey, or counter
     }));
   }
