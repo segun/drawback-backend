@@ -43,6 +43,42 @@ export class UsersService {
     });
   }
 
+  private hasActiveSubscription(user: User, now: Date): boolean {
+    const subscription = user.subscription;
+    return (
+      !!subscription?.endDate &&
+      now < subscription.endDate &&
+      subscription.status === 'active'
+    );
+  }
+
+  private hasRewardedDiscoveryAccess(user: User, now: Date): boolean {
+    return (
+      !!user.temporaryDiscoveryAccessExpiresAt &&
+      now < user.temporaryDiscoveryAccessExpiresAt
+    );
+  }
+
+  getDiscoveryAccessSnapshot(
+    user: User,
+    now = new Date(),
+  ): {
+    hasActiveSubscription: boolean;
+    hasRewardedAccess: boolean;
+    hasDiscoveryAccess: boolean;
+    temporaryDiscoveryAccessExpiresAt: Date | null;
+  } {
+    const hasActiveSubscription = this.hasActiveSubscription(user, now);
+    const hasRewardedAccess = this.hasRewardedDiscoveryAccess(user, now);
+
+    return {
+      hasActiveSubscription,
+      hasRewardedAccess,
+      hasDiscoveryAccess: hasActiveSubscription || hasRewardedAccess,
+      temporaryDiscoveryAccessExpiresAt: user.temporaryDiscoveryAccessExpiresAt,
+    };
+  }
+
   async findByDisplayName(displayName: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { displayName: displayName.toLowerCase() },
@@ -170,6 +206,31 @@ export class UsersService {
     }
 
     user.appearInSearches = appearInSearches;
+    return this.usersRepository.save(user);
+  }
+
+  async grantTemporaryDiscoveryAccess(
+    userId: string,
+    durationMinutes: number,
+  ): Promise<User> {
+    console.log(`Granting temporary discovery access to user ${userId} for ${durationMinutes} minutes`);
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const now = new Date();
+    const baseline =
+      user.temporaryDiscoveryAccessExpiresAt &&
+      user.temporaryDiscoveryAccessExpiresAt > now
+        ? user.temporaryDiscoveryAccessExpiresAt
+        : now;
+
+    const expiresAt = new Date(
+      baseline.getTime() + durationMinutes * 60 * 1000,
+    );
+    user.temporaryDiscoveryAccessExpiresAt = expiresAt;
+
     return this.usersRepository.save(user);
   }
 

@@ -27,6 +27,7 @@ import { SetAppearInSearchesDto } from './dto/set-appear-in-searches.dto';
 import { SetDiscoveryGameDto } from './dto/set-discovery-game.dto';
 import { DiscoveryUserResponseDto } from './dto/discovery-user-response.dto';
 import { UsersService } from './users.service';
+import { GrantRewardedDiscoveryAccessDto } from './dto/grant-rewarded-discovery-access.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -46,22 +47,25 @@ export class UsersController {
       throw new NotFoundException('User not found');
     }
 
-    // Compute hasDiscoveryAccess dynamically based on subscription
     const now = new Date();
-    const hasDiscoveryAccess =
-      userWithSub.subscription?.endDate &&
-      now < userWithSub.subscription.endDate &&
-      userWithSub.subscription.status === 'active';
+    const access = this.usersService.getDiscoveryAccessSnapshot(
+      userWithSub,
+      now,
+    );
 
     // Use instanceToPlain to properly apply @Exclude() decorators
     const plainUser = instanceToPlain(userWithSub) as Record<string, unknown>;
 
     return {
       ...plainUser,
-      hasDiscoveryAccess, // Override with computed value
+      serverNow: now.toISOString(),
+      hasDiscoveryAccess: access.hasDiscoveryAccess,
+      temporaryDiscoveryAccessExpiresAt:
+        access.temporaryDiscoveryAccessExpiresAt?.toISOString() ?? null,
       subscription: userWithSub.subscription
         ? {
             tier: userWithSub.subscription.tier,
+            platform: userWithSub.subscription.platform,
             endDate: userWithSub.subscription.endDate,
             autoRenew: userWithSub.subscription.autoRenew,
           }
@@ -97,6 +101,57 @@ export class UsersController {
       dto.appearInDiscoveryGame,
       dto.base64Image,
     );
+  }
+
+  @Post('me/discovery-access/rewarded-ad')
+  @Throttle({ short: { ttl: 1000, limit: 10 } })
+  async grantRewardedDiscoveryAccess(
+    @CurrentUser() user: User,
+    @Body() dto: GrantRewardedDiscoveryAccessDto,
+  ): Promise<{
+    granted: boolean;
+    serverNow: string;
+    temporaryDiscoveryAccessExpiresAt: string | null;
+    user: {
+      id: string;
+      email: string;
+      displayName: string;
+      hasDiscoveryAccess: boolean;
+      temporaryDiscoveryAccessExpiresAt: string | null;
+    };
+  }> {
+    await this.usersService.grantTemporaryDiscoveryAccess(
+      user.id,
+      dto.durationMinutes,
+    );
+
+    const userWithSub = await this.usersService.findOneWithSubscription(
+      user.id,
+    );
+    if (!userWithSub) {
+      throw new NotFoundException('User not found');
+    }
+
+    const now = new Date();
+    const access = this.usersService.getDiscoveryAccessSnapshot(
+      userWithSub,
+      now,
+    );
+
+    return {
+      granted: true,
+      serverNow: now.toISOString(),
+      temporaryDiscoveryAccessExpiresAt:
+        access.temporaryDiscoveryAccessExpiresAt?.toISOString() ?? null,
+      user: {
+        id: userWithSub.id,
+        email: userWithSub.email,
+        displayName: userWithSub.displayName,
+        hasDiscoveryAccess: access.hasDiscoveryAccess,
+        temporaryDiscoveryAccessExpiresAt:
+          access.temporaryDiscoveryAccessExpiresAt?.toISOString() ?? null,
+      },
+    };
   }
 
   @Delete('me')
@@ -135,20 +190,17 @@ export class UsersController {
       throw new NotFoundException('User not found');
     }
 
-    const subscription = userWithSub.subscription;
     const now = new Date();
-    const hasSubscription =
-      !!subscription &&
-      (subscription.endDate > now ||
-        subscription.status === 'grace_period' ||
-        subscription.status === 'on_hold') &&
-      subscription.status !== 'expired' &&
-      subscription.status !== 'revoked';
+    const access = this.usersService.getDiscoveryAccessSnapshot(
+      userWithSub,
+      now,
+    );
 
-    if (!hasSubscription) {
+    if (!access.hasDiscoveryAccess) {
       throw new ForbiddenException({
         error: 'DISCOVERY_LOCKED',
-        message: 'Discovery requires premium access',
+        message:
+          'Discovery requires an active subscription or rewarded-ad access',
       });
     }
 

@@ -57,6 +57,9 @@ export class User {
   @Transform(({ value }) => Boolean(value))
   hasDiscoveryAccess!: boolean;
 
+  @Column({ type: 'datetime', nullable: true })
+  temporaryDiscoveryAccessExpiresAt!: Date | null;
+
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role!: UserRole;
 

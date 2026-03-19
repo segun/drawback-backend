@@ -21,6 +21,7 @@ const makeUser = (overrides: Partial<User> = {}): User =>
     displayName: '@alice',
     mode: UserMode.PRIVATE,
     appearInSearches: true,
+    temporaryDiscoveryAccessExpiresAt: null,
     ...overrides,
   }) as User;
 
@@ -52,9 +53,9 @@ const chatServiceMock = (): jest.Mocked<
 });
 
 const storageMock = (): jest.Mocked<
-  Pick<StorageService, 'deleteUserAvatar'>
+  Pick<StorageService, 'deleteDiscoveryImage'>
 > => ({
-  deleteUserAvatar: jest.fn().mockResolvedValue(undefined),
+  deleteDiscoveryImage: jest.fn().mockResolvedValue(undefined),
 });
 
 describe('UsersService', () => {
@@ -258,6 +259,94 @@ describe('UsersService', () => {
       await expect(
         service.setAppearInSearches('missing', false),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── discovery access helpers ────────────────────────────────────────
+
+  describe('getDiscoveryAccessSnapshot', () => {
+    it('returns access when user has active subscription', () => {
+      const now = new Date('2026-03-19T10:30:00.000Z');
+      const user = makeUser({
+        subscription: {
+          endDate: new Date('2026-03-19T11:30:00.000Z'),
+          status: 'active',
+        } as User['subscription'],
+      });
+
+      const access = service.getDiscoveryAccessSnapshot(user, now);
+
+      expect(access.hasActiveSubscription).toBe(true);
+      expect(access.hasRewardedAccess).toBe(false);
+      expect(access.hasDiscoveryAccess).toBe(true);
+    });
+
+    it('returns access when rewarded temporary window is active', () => {
+      const now = new Date('2026-03-19T10:30:00.000Z');
+      const user = makeUser({
+        temporaryDiscoveryAccessExpiresAt: new Date('2026-03-19T10:35:00.000Z'),
+      });
+
+      const access = service.getDiscoveryAccessSnapshot(user, now);
+
+      expect(access.hasActiveSubscription).toBe(false);
+      expect(access.hasRewardedAccess).toBe(true);
+      expect(access.hasDiscoveryAccess).toBe(true);
+    });
+
+    it('returns no access when both subscription and reward are inactive', () => {
+      const now = new Date('2026-03-19T10:30:00.000Z');
+      const user = makeUser({
+        subscription: {
+          endDate: new Date('2026-03-19T09:30:00.000Z'),
+          status: 'expired',
+        } as User['subscription'],
+        temporaryDiscoveryAccessExpiresAt: new Date('2026-03-19T10:00:00.000Z'),
+      });
+
+      const access = service.getDiscoveryAccessSnapshot(user, now);
+
+      expect(access.hasActiveSubscription).toBe(false);
+      expect(access.hasRewardedAccess).toBe(false);
+      expect(access.hasDiscoveryAccess).toBe(false);
+    });
+  });
+
+  describe('grantTemporaryDiscoveryAccess', () => {
+    it('grants a new expiry from current time when no active reward exists', async () => {
+      const user = makeUser({ temporaryDiscoveryAccessExpiresAt: null });
+      usersRepo.findOne.mockResolvedValue(user);
+      usersRepo.save.mockImplementation((u: User) => Promise.resolve(u));
+
+      const now = new Date('2026-03-19T10:30:00.000Z');
+      jest.useFakeTimers().setSystemTime(now);
+
+      const result = await service.grantTemporaryDiscoveryAccess('user-1', 5);
+
+      expect(result.temporaryDiscoveryAccessExpiresAt?.toISOString()).toBe(
+        '2026-03-19T10:35:00.000Z',
+      );
+
+      jest.useRealTimers();
+    });
+
+    it('extends from existing future expiry instead of resetting from now', async () => {
+      const user = makeUser({
+        temporaryDiscoveryAccessExpiresAt: new Date('2026-03-19T10:35:00.000Z'),
+      });
+      usersRepo.findOne.mockResolvedValue(user);
+      usersRepo.save.mockImplementation((u: User) => Promise.resolve(u));
+
+      const now = new Date('2026-03-19T10:30:00.000Z');
+      jest.useFakeTimers().setSystemTime(now);
+
+      const result = await service.grantTemporaryDiscoveryAccess('user-1', 5);
+
+      expect(result.temporaryDiscoveryAccessExpiresAt?.toISOString()).toBe(
+        '2026-03-19T10:40:00.000Z',
+      );
+
+      jest.useRealTimers();
     });
   });
 
