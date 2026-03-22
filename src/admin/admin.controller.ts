@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Res,
@@ -17,9 +18,12 @@ import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { AdminService } from './admin.service';
+import { AppConfigService } from '../app-config/app-config.service';
 import { BanUsersDto } from './dto/ban-users.dto';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { ResetUserPasswordsDto } from './dto/reset-user-passwords.dto';
+import { SetAppConfigDto } from './dto/set-app-config.dto';
+import { SetUserConfigOverridesDto } from './dto/set-user-config-overrides.dto';
 import { UnbanUsersDto } from './dto/unban-users.dto';
 import { UserFilterQueryDto } from './dto/user-filter-query.dto';
 import { UserSearchQueryDto } from './dto/user-search-query.dto';
@@ -33,6 +37,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly sessionEventsService: SessionEventsService,
+    private readonly appConfigService: AppConfigService,
   ) {}
 
   @Get('users')
@@ -110,5 +115,30 @@ export class AdminController {
   @Get('session-events/stats')
   async getSessionEventStats() {
     return this.sessionEventsService.getEventStats();
+  }
+
+  // ── App Config ──────────────────────────────────────────────────────────────
+
+  @Get('app-config')
+  getAppConfig() {
+    return this.appConfigService.getConfig();
+  }
+
+  @Patch('app-config')
+  setAppConfig(@Body() dto: SetAppConfigDto) {
+    return this.appConfigService.setConfig(dto);
+  }
+
+  @Get('app-config/users/:userId')
+  async getUserAppConfig(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.appConfigService.getUserConfigOverrides(userId);
+  }
+
+  @Patch('app-config/users/:userId')
+  async setUserAppConfig(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: SetUserConfigOverridesDto,
+  ) {
+    return this.appConfigService.setUserConfigOverrides(userId, dto);
   }
 }

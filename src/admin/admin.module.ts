@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
 import { AdminAuditLog } from './entities/admin-audit-log.entity';
+import { AppConfigModule } from '../app-config/app-config.module';
 import { MailModule } from '../mail/mail.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SessionEventsModule } from '../session-events/session-events.module';
@@ -14,6 +15,7 @@ import { AdminController } from './admin.controller';
     forwardRef(() => MailModule),
     forwardRef(() => RealtimeModule),
     SessionEventsModule,
+    AppConfigModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

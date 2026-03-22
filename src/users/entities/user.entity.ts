@@ -91,6 +91,10 @@ export class User {
   @Column({ type: 'datetime', nullable: true })
   deleteTokenExpiry!: Date | null;
 
+  @Exclude()
+  @Column({ type: 'json', nullable: true })
+  configOverrides!: { ads?: { provider?: string } } | null;
+
   @OneToOne(() => Subscription, (subscription) => subscription.user, {
     nullable: true,
   })

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdminModule } from './admin/admin.module';
+import { AppConfigModule } from './app-config/app-config.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { BackupModule } from './backup/backup.module';
@@ -60,6 +61,7 @@ import { UsersModule } from './users/users.module';
     }),
     MailModule,
     AuthModule,
+    AppConfigModule,
     UsersModule,
     ChatModule,
     RealtimeModule,

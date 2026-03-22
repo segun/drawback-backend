@@ -28,6 +28,7 @@ import { SetDiscoveryGameDto } from './dto/set-discovery-game.dto';
 import { DiscoveryUserResponseDto } from './dto/discovery-user-response.dto';
 import { UsersService } from './users.service';
 import { GrantRewardedDiscoveryAccessDto } from './dto/grant-rewarded-discovery-access.dto';
+import { AppConfigService } from '../app-config/app-config.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -35,6 +36,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private readonly appConfigService: AppConfigService,
   ) {}
 
   @Get('me')
@@ -53,6 +55,13 @@ export class UsersController {
       now,
     );
 
+    const globalConfig = await this.appConfigService.getConfig();
+    const ads = {
+      provider:
+        userWithSub.configOverrides?.ads?.provider ??
+        globalConfig.ads.provider,
+    };
+
     // Use instanceToPlain to properly apply @Exclude() decorators
     const plainUser = instanceToPlain(userWithSub) as Record<string, unknown>;
 
@@ -70,6 +79,7 @@ export class UsersController {
             autoRenew: userWithSub.subscription.autoRenew,
           }
         : null,
+      ads,
     };
   }
 
