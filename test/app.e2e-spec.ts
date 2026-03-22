@@ -29,6 +29,7 @@ import { SavedChat } from './../src/chat/entities/saved-chat.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { DrawGateway } from './../src/realtime/draw.gateway';
 import { SessionEvent } from './../src/session-events/entities/session-event.entity';
+import { AppConfig } from './../src/app-config/entities/app-config.entity';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashed'),
@@ -189,6 +190,20 @@ const subscriptionsRepo = {
   remove: jest.fn().mockResolvedValue({}),
 };
 
+const appConfigRepo = {
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'app-config-id',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'app-config-id',
+    }),
+  ),
+};
+
 /** Gateway mock – prevents Socket.IO from starting */
 const gatewayMock = {
   notifyChatRequested: jest.fn(),
@@ -237,6 +252,8 @@ describe('Drawback API (e2e)', () => {
       .useValue(sessionEventsRepo)
       .overrideProvider(getRepositoryToken(Subscription))
       .useValue(subscriptionsRepo)
+      .overrideProvider(getRepositoryToken(AppConfig))
+      .useValue(appConfigRepo)
       .overrideProvider(CacheService)
       .useValue({
         get: jest.fn(),
