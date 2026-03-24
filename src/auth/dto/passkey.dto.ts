@@ -1,4 +1,10 @@
-import { IsEmail, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,

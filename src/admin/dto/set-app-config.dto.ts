@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsString, ValidateNested } from 'class-validator';
+import { IsInt, IsString, Min, ValidateNested } from 'class-validator';
 
 class AdsConfigDto {
   @IsString()
@@ -10,4 +10,8 @@ export class SetAppConfigDto {
   @ValidateNested()
   @Type(() => AdsConfigDto)
   ads!: AdsConfigDto;
+
+  @IsInt()
+  @Min(1)
+  temporaryDiscoveryAccessDurationMinutes!: number;
 }

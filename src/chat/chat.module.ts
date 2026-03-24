@@ -7,6 +7,7 @@ import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatRequest } from './entities/chat-request.entity';
 import { SavedChat } from './entities/saved-chat.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SavedChat } from './entities/saved-chat.entity';
     forwardRef(() => AuthModule),
     forwardRef(() => UsersModule),
     forwardRef(() => RealtimeModule),
+    NotificationsModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],

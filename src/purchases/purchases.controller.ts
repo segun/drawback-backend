@@ -34,7 +34,7 @@ export class PurchasesController {
     this.logger.log(
       `Verifying ${dto.platform} receipt for user ${user.id}, productId: ${dto.productId}, receipt length: ${dto.receipt?.length || 0}`,
     );
-    
+
     return await this.purchasesService.verifyReceipt(
       user.id,
       dto.platform,

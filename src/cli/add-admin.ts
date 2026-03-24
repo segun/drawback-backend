@@ -96,4 +96,7 @@ async function addAdmin() {
   }
 }
 
-addAdmin();
+addAdmin().catch((error) => {
+  console.error('❌ Unexpected error:', error);
+  process.exit(1);
+});

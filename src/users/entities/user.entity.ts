@@ -10,6 +10,7 @@ import {
 import { UserMode } from '../enums/user-mode.enum';
 import { UserRole } from '../enums/user-role.enum';
 import { Subscription } from './subscription.entity';
+import { UserConfigOverridesData } from '../../app-config/entities/app-config.entity';
 
 @Entity('users')
 export class User {
@@ -93,7 +94,7 @@ export class User {
 
   @Exclude()
   @Column({ type: 'json', nullable: true })
-  configOverrides!: { ads?: { provider?: string } } | null;
+  configOverrides!: UserConfigOverridesData | null;
 
   @OneToOne(() => Subscription, (subscription) => subscription.user, {
     nullable: true,

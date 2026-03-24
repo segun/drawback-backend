@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DrawGateway } from '../realtime/draw.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/entities/user.entity';
 import { UserMode } from '../users/enums/user-mode.enum';
@@ -49,12 +50,17 @@ type MockedDrawGateway = {
   forceCloseRoom: jest.Mock;
 };
 
+type MockedNotificationsService = {
+  sendChatRequestPush: jest.Mock;
+};
+
 describe('ChatService', () => {
   let service: ChatService;
   let chatRequestRepo: ReturnType<typeof repoMock>;
   let savedChatsRepo: ReturnType<typeof repoMock>;
   let usersService: MockedUsersService;
   let drawGateway: MockedDrawGateway;
+  let notificationsService: MockedNotificationsService;
 
   beforeEach(async () => {
     chatRequestRepo = repoMock();
@@ -81,6 +87,12 @@ describe('ChatService', () => {
             forceCloseRoom: jest.fn(),
           },
         },
+        {
+          provide: NotificationsService,
+          useValue: {
+            sendChatRequestPush: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -89,6 +101,8 @@ describe('ChatService', () => {
     savedChatsRepo = module.get(getRepositoryToken(SavedChat));
     usersService = module.get<MockedUsersService>(UsersService);
     drawGateway = module.get<MockedDrawGateway>(DrawGateway);
+    notificationsService =
+      module.get<MockedNotificationsService>(NotificationsService);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -120,6 +134,10 @@ describe('ChatService', () => {
       expect(drawGateway.notifyChatRequested).toHaveBeenCalledWith(
         toUser.id,
         expect.objectContaining({ requestId: 'req-1' }),
+      );
+      expect(notificationsService.sendChatRequestPush).toHaveBeenCalledWith(
+        toUser.id,
+        expect.objectContaining({ requestId: 'req-1', senderName: '@alice' }),
       );
       expect(result.id).toBe('req-1');
     });

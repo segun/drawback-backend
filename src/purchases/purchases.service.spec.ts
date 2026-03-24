@@ -185,6 +185,7 @@ describe('PurchasesService', () => {
     };
 
     // Inject the mock verifier
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     (service as any).appleVerifier = mockVerifier;
 
     subscriptionRepository.findOne.mockResolvedValue({ id: 'sub-1' });
@@ -224,6 +225,7 @@ describe('PurchasesService', () => {
   });
 
   it('rejects JWS transaction if verifier is not initialized', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     (service as any).appleVerifier = null;
 
     const jwsTransaction =
@@ -245,6 +247,7 @@ describe('PurchasesService', () => {
       }),
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     (service as any).appleVerifier = mockVerifier;
 
     const jwsTransaction =

@@ -54,6 +54,7 @@ describe('AuthService', () => {
   let credentialsRepo: MockedUsersRepo;
   let jwtService: MockedJwtService;
   let mailService: MockedMailService;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let usersService: MockedUsersService;
 
   beforeEach(async () => {
@@ -103,7 +104,9 @@ describe('AuthService', () => {
 
     service = module.get(AuthService);
     usersRepo = module.get<MockedUsersRepo>(getRepositoryToken(User));
-    credentialsRepo = module.get<MockedUsersRepo>(getRepositoryToken(Credential));
+    credentialsRepo = module.get<MockedUsersRepo>(
+      getRepositoryToken(Credential),
+    );
     jwtService = module.get<MockedJwtService>(JwtService);
     mailService = module.get<MockedMailService>(MailService);
     usersService = module.get<MockedUsersService>(UsersService);
@@ -200,7 +203,7 @@ describe('AuthService', () => {
 
       const result = await service.login(dto);
 
-      expect(result.accessToken).toBe('jwt-token');
+      expect(result?.accessToken).toBe('jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith(
         expect.objectContaining({ sub: user.id, email: user.email }),
       );

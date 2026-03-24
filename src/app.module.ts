@@ -15,6 +15,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { ReportsModule } from './reports/reports.module';
 import { SessionEventsModule } from './session-events/session-events.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { UsersModule } from './users/users.module';
     AdminModule,
     ReportsModule,
     SessionEventsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [],

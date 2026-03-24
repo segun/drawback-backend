@@ -33,6 +33,7 @@ import { DrawClearDto } from './dto/draw-clear.dto';
 import { DrawEmoteDto } from './dto/draw-emote.dto';
 import { DrawStrokeDto } from './dto/draw-stroke.dto';
 import { JoinChatDto } from './dto/join-chat.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Max draw.clear events allowed per socket per 5 seconds. */
 const CLEAR_RATE_LIMIT = 5;
@@ -117,6 +118,7 @@ export class DrawGateway
     private readonly chatService: ChatService,
     private readonly config: ConfigService,
     private readonly sessionEventsService: SessionEventsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -440,6 +442,14 @@ export class DrawGateway
             roomId,
             requestId: dto.requestId,
             waitingUserId: userId,
+          });
+
+          const waitingUser = await this.usersService.findById(userId);
+          void this.notificationsService.sendPeerWaitingPush(peerId, {
+            requestId: dto.requestId,
+            roomId,
+            waitingUserId: userId,
+            waitingUserName: waitingUser?.displayName,
           });
         }
       }

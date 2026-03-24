@@ -10,6 +10,13 @@ export interface AppConfigData {
   ads: {
     provider: string;
   };
+  temporaryDiscoveryAccessDurationMinutes: number;
+}
+
+export interface UserConfigOverridesData {
+  ads?: {
+    provider?: string;
+  };
 }
 
 @Entity('app_config')

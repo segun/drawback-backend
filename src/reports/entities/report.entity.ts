@@ -7,7 +7,6 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Exclude, Expose } from 'class-transformer';
 import { User } from '../../users/entities/user.entity';
 import { ReportType } from '../enums/report-type.enum';
 import { ReportStatus } from '../enums/report-status.enum';

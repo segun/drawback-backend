@@ -1,12 +1,33 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AppConfig, AppConfigData } from './entities/app-config.entity';
+import {
+  AppConfig,
+  AppConfigData,
+  UserConfigOverridesData,
+} from './entities/app-config.entity';
 import { User } from '../users/entities/user.entity';
 
 const DEFAULT_CONFIG: AppConfigData = {
   ads: { provider: '' },
+  temporaryDiscoveryAccessDurationMinutes: 5,
 };
+
+const normalizeConfig = (
+  config: Partial<AppConfigData> | null | undefined,
+): AppConfigData => ({
+  ads: {
+    provider:
+      typeof config?.ads?.provider === 'string'
+        ? config.ads.provider
+        : DEFAULT_CONFIG.ads.provider,
+  },
+  temporaryDiscoveryAccessDurationMinutes:
+    Number.isInteger(config?.temporaryDiscoveryAccessDurationMinutes) &&
+    (config?.temporaryDiscoveryAccessDurationMinutes ?? 0) > 0
+      ? (config?.temporaryDiscoveryAccessDurationMinutes as number)
+      : DEFAULT_CONFIG.temporaryDiscoveryAccessDurationMinutes,
+});
 
 @Injectable()
 export class AppConfigService {
@@ -20,27 +41,21 @@ export class AppConfigService {
   async getConfig(): Promise<AppConfigData> {
     const records = await this.appConfigRepository.find({ take: 1 });
     const record = records[0];
-    if (!record) {
-      return DEFAULT_CONFIG;
-    }
-    return {
-      ads: {
-        provider: record.config?.ads?.provider ?? DEFAULT_CONFIG.ads.provider,
-      },
-    };
+    return normalizeConfig(record?.config);
   }
 
   async setConfig(data: AppConfigData): Promise<AppConfigData> {
+    const normalized = normalizeConfig(data);
     const records = await this.appConfigRepository.find({ take: 1 });
     const record = records[0] ?? this.appConfigRepository.create();
-    record.config = data;
+    record.config = normalized;
     await this.appConfigRepository.save(record);
-    return data;
+    return normalized;
   }
 
   async getUserConfigOverrides(
     userId: string,
-  ): Promise<{ ads?: { provider?: string } } | null> {
+  ): Promise<UserConfigOverridesData | null> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -50,8 +65,8 @@ export class AppConfigService {
 
   async setUserConfigOverrides(
     userId: string,
-    overrides: { ads?: { provider?: string } } | null,
-  ): Promise<{ ads?: { provider?: string } } | null> {
+    overrides: UserConfigOverridesData | null,
+  ): Promise<UserConfigOverridesData | null> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');

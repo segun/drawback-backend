@@ -213,7 +213,9 @@ export class UsersService {
     userId: string,
     durationMinutes: number,
   ): Promise<User> {
-    console.log(`Granting temporary discovery access to user ${userId} for ${durationMinutes} minutes`);
+    console.log(
+      `Granting temporary discovery access to user ${userId} for ${durationMinutes} minutes`,
+    );
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');

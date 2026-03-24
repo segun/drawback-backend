@@ -7,6 +7,7 @@ import { ChatRequest } from './chat/entities/chat-request.entity';
 import { SavedChat } from './chat/entities/saved-chat.entity';
 import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
 import { AppleNotification } from './purchases/entities/apple-notification.entity';
+import { PushToken } from './notifications/entities/push-token.entity';
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -29,6 +30,7 @@ export default new DataSource({
     SavedChat,
     AdminAuditLog,
     AppleNotification,
+    PushToken,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

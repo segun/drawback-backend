@@ -1,11 +1,12 @@
-import { IsIn, IsInt, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class GrantRewardedDiscoveryAccessDto {
   @IsIn(['rewarded_ad'])
   grantType!: 'rewarded_ad';
 
+  @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(5)
-  durationMinutes!: number;
+  @Max(60)
+  durationMinutes?: number;
 }

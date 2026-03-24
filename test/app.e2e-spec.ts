@@ -30,6 +30,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { DrawGateway } from './../src/realtime/draw.gateway';
 import { SessionEvent } from './../src/session-events/entities/session-event.entity';
 import { AppConfig } from './../src/app-config/entities/app-config.entity';
+import { PushToken } from './../src/notifications/entities/push-token.entity';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashed'),
@@ -204,6 +205,22 @@ const appConfigRepo = {
   ),
 };
 
+const pushTokensRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'push-token-id',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'push-token-id',
+    }),
+  ),
+  update: jest.fn().mockResolvedValue({}),
+};
+
 /** Gateway mock – prevents Socket.IO from starting */
 const gatewayMock = {
   notifyChatRequested: jest.fn(),
@@ -254,6 +271,8 @@ describe('Drawback API (e2e)', () => {
       .useValue(subscriptionsRepo)
       .overrideProvider(getRepositoryToken(AppConfig))
       .useValue(appConfigRepo)
+      .overrideProvider(getRepositoryToken(PushToken))
+      .useValue(pushTokensRepo)
       .overrideProvider(CacheService)
       .useValue({
         get: jest.fn(),

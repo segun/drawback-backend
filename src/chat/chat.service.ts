@@ -16,6 +16,7 @@ import { ChatRequestStatus } from './enums/chat-request-status.enum';
 import { DrawGateway } from '../realtime/draw.gateway';
 import { UsersService } from '../users/users.service';
 import { UserMode } from '../users/enums/user-mode.enum';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ChatService {
@@ -28,6 +29,7 @@ export class ChatService {
     private readonly usersService: UsersService,
     @Inject(forwardRef(() => DrawGateway))
     private readonly drawGateway: DrawGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createRequest(
@@ -88,6 +90,12 @@ export class ChatService {
         displayName: fromUser.displayName,
       },
       message: `${fromUser.displayName} wants to chat. Accept?`,
+    });
+
+    void this.notificationsService.sendChatRequestPush(toUser.id, {
+      requestId: savedRequest.id,
+      senderName: fromUser.displayName,
+      messageId: `req-${savedRequest.id}`,
     });
 
     return savedRequest;

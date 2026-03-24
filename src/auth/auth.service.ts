@@ -551,8 +551,8 @@ export class AuthService {
           publicKey: Buffer.from(credential.publicKey),
           counter: credential.counter,
           transports: credential.transports || null,
-          deviceId: (dto.deviceId ?? null) as string | null,
-          platform: (dto.platform ?? null) as string | null,
+          deviceId: dto.deviceId ?? null,
+          platform: dto.platform ?? null,
           lastUsedAt: new Date(), // Set to now to prevent cleanup
         });
         await transactionalEntityManager.save(newCredential);
@@ -782,8 +782,8 @@ export class AuthService {
       createdAt: cred.createdAt,
       lastUsedAt: cred.lastUsedAt,
       transports: cred.transports,
-      deviceId: cred.deviceId as string | null,
-      platform: cred.platform as string | null,
+      deviceId: cred.deviceId,
+      platform: cred.platform,
       // Don't expose credentialId, publicKey, or counter
     }));
   }

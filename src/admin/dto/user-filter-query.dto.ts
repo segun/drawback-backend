@@ -12,7 +12,7 @@ export class UserFilterQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return Boolean(value);
   })
   @IsBoolean()
   appearInSearches?: boolean;
@@ -21,7 +21,7 @@ export class UserFilterQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return Boolean(value);
   })
   @IsBoolean()
   appearInDiscoveryGame?: boolean;
@@ -30,7 +30,7 @@ export class UserFilterQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return Boolean(value);
   })
   @IsBoolean()
   isBlocked?: boolean;
@@ -39,7 +39,7 @@ export class UserFilterQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return Boolean(value);
   })
   @IsBoolean()
   isActivated?: boolean;

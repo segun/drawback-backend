@@ -58,8 +58,7 @@ export class UsersController {
     const globalConfig = await this.appConfigService.getConfig();
     const ads = {
       provider:
-        userWithSub.configOverrides?.ads?.provider ??
-        globalConfig.ads.provider,
+        userWithSub.configOverrides?.ads?.provider ?? globalConfig.ads.provider,
     };
 
     // Use instanceToPlain to properly apply @Exclude() decorators
@@ -130,9 +129,13 @@ export class UsersController {
       temporaryDiscoveryAccessExpiresAt: string | null;
     };
   }> {
+    const config = await this.appConfigService.getConfig();
+    const durationMinutes =
+      dto.durationMinutes ?? config.temporaryDiscoveryAccessDurationMinutes;
+
     await this.usersService.grantTemporaryDiscoveryAccess(
       user.id,
-      dto.durationMinutes,
+      durationMinutes,
     );
 
     const userWithSub = await this.usersService.findOneWithSubscription(
