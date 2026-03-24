@@ -243,6 +243,7 @@ export class NotificationsService implements OnModuleInit {
         payload: {
           aps: {
             sound: 'default',
+            contentAvailable: true,
           },
         },
       },
