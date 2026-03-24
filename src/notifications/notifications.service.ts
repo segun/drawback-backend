@@ -69,20 +69,44 @@ export class NotificationsService implements OnModuleInit {
     userId: string,
     dto: RegisterPushTokenDto,
   ): Promise<void> {
-    const existing = await this.pushTokenRepository.findOne({
+    const existingByToken = await this.pushTokenRepository.findOne({
       where: { provider: dto.provider, token: dto.token },
+    });
+    const existingForUserProvider = await this.pushTokenRepository.findOne({
+      where: { userId, provider: dto.provider },
     });
 
     const now = new Date();
 
-    if (existing) {
-      existing.userId = userId;
-      existing.platform = dto.platform;
-      existing.deviceId = dto.deviceId;
-      existing.active = true;
-      existing.deactivationReason = null;
-      existing.lastSeenAt = now;
-      await this.pushTokenRepository.save(existing);
+    // Reuse a token row if it already exists globally (provider+token is unique).
+    if (existingByToken) {
+      if (
+        existingForUserProvider &&
+        existingForUserProvider.id !== existingByToken.id
+      ) {
+        await this.pushTokenRepository.delete({
+          id: existingForUserProvider.id,
+        });
+      }
+
+      existingByToken.userId = userId;
+      existingByToken.platform = dto.platform;
+      existingByToken.deviceId = dto.deviceId;
+      existingByToken.active = true;
+      existingByToken.deactivationReason = null;
+      existingByToken.lastSeenAt = now;
+      await this.pushTokenRepository.save(existingByToken);
+      return;
+    }
+
+    if (existingForUserProvider) {
+      existingForUserProvider.token = dto.token;
+      existingForUserProvider.platform = dto.platform;
+      existingForUserProvider.deviceId = dto.deviceId;
+      existingForUserProvider.active = true;
+      existingForUserProvider.deactivationReason = null;
+      existingForUserProvider.lastSeenAt = now;
+      await this.pushTokenRepository.save(existingForUserProvider);
       return;
     }
 
@@ -106,13 +130,11 @@ export class NotificationsService implements OnModuleInit {
       where: { provider: dto.provider, token: dto.token, userId },
     });
 
-    if (!existing || !existing.active) {
+    if (!existing) {
       return; // idempotent
     }
 
-    existing.active = false;
-    existing.deactivationReason = 'user_logout';
-    await this.pushTokenRepository.save(existing);
+    await this.pushTokenRepository.delete({ id: existing.id });
   }
 
   async sendChatRequestPush(
@@ -143,6 +165,8 @@ export class NotificationsService implements OnModuleInit {
         active: true,
         provider: PushProvider.FCM,
       },
+      order: { updatedAt: 'DESC' },
+      take: 1,
     });
 
     if (tokens.length === 0) {
@@ -188,6 +212,8 @@ export class NotificationsService implements OnModuleInit {
         active: true,
         provider: PushProvider.FCM,
       },
+      order: { updatedAt: 'DESC' },
+      take: 1,
     });
 
     if (tokens.length === 0) {
@@ -277,10 +303,7 @@ export class NotificationsService implements OnModuleInit {
         this.logger.warn(
           `push.token.invalidated: token=${redactedToken} requestId=${payload.requestId}`,
         );
-        await this.pushTokenRepository.update(
-          { id: pushToken.id },
-          { active: false, deactivationReason: 'fcm_invalid_token' },
-        );
+        await this.pushTokenRepository.delete({ id: pushToken.id });
         return;
       }
 
