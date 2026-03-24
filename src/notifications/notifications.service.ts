@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import * as admin from 'firebase-admin';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { CacheService } from '../cache/cache.service';
 import { PushToken } from './entities/push-token.entity';
 import { PushProvider } from './enums/push-provider.enum';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
@@ -20,6 +21,7 @@ export class NotificationsService implements OnModuleInit {
     @InjectRepository(PushToken)
     private readonly pushTokenRepository: Repository<PushToken>,
     private readonly configService: ConfigService,
+    private readonly cacheService: CacheService,
   ) {}
 
   onModuleInit(): void {
@@ -124,9 +126,23 @@ export class NotificationsService implements OnModuleInit {
 
   async sendChatRequestPush(
     recipientUserId: string,
-    payload: { requestId: string; senderName: string; messageId: string },
+    payload: {
+      requestId: string;
+      senderUserId: string;
+      senderName: string;
+      messageId: string;
+    },
   ): Promise<void> {
     if (!this.canSendPush()) {
+      return;
+    }
+
+    const cooldownKey = `push:chat-request:${payload.senderUserId}:${recipientUserId}`;
+    const cooldownToken = await this.cacheService.acquireLock(cooldownKey, 60);
+    if (!cooldownToken) {
+      this.logger.warn(
+        `push.chat-request.rate-limited: from=${payload.senderUserId} to=${recipientUserId} requestId=${payload.requestId}`,
+      );
       return;
     }
 

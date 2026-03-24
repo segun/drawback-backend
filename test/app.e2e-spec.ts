@@ -278,6 +278,7 @@ describe('Drawback API (e2e)', () => {
         get: jest.fn(),
         set: jest.fn(),
         del: jest.fn(),
+        acquireLock: jest.fn().mockResolvedValue('lock-token'),
       })
       .overrideProvider(MailService)
       .useValue({ sendActivationEmail: jest.fn().mockResolvedValue(undefined) })

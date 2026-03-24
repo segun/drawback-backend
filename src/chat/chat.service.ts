@@ -6,6 +6,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateChatRequestDto } from './dto/create-chat-request.dto';
@@ -94,8 +95,9 @@ export class ChatService {
 
     void this.notificationsService.sendChatRequestPush(toUser.id, {
       requestId: savedRequest.id,
+      senderUserId: fromUser.id,
       senderName: fromUser.displayName,
-      messageId: `req-${savedRequest.id}`,
+      messageId: `req-${randomUUID()}`,
     });
 
     return savedRequest;
