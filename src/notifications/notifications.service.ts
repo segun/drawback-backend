@@ -83,9 +83,6 @@ export class NotificationsService implements OnModuleInit {
       existing.deactivationReason = null;
       existing.lastSeenAt = now;
       await this.pushTokenRepository.save(existing);
-      this.logger.log(
-        `Push token updated for user ${userId} [${dto.provider}:${dto.token.slice(0, 8)}...]`,
-      );
       return;
     }
 
@@ -99,9 +96,6 @@ export class NotificationsService implements OnModuleInit {
       lastSeenAt: now,
     });
     await this.pushTokenRepository.save(pushToken);
-    this.logger.log(
-      `Push token registered for user ${userId} [${dto.provider}:${dto.token.slice(0, 8)}...]`,
-    );
   }
 
   async deactivateToken(
@@ -119,9 +113,6 @@ export class NotificationsService implements OnModuleInit {
     existing.active = false;
     existing.deactivationReason = 'user_logout';
     await this.pushTokenRepository.save(existing);
-    this.logger.log(
-      `Push token deactivated for user ${userId} [${dto.provider}:${dto.token.slice(0, 8)}...]`,
-    );
   }
 
   async sendChatRequestPush(
@@ -280,10 +271,7 @@ export class NotificationsService implements OnModuleInit {
     };
 
     try {
-      const msgId = await attemptSend();
-      this.logger.log(
-        `Push sent: requestId=${payload.requestId} messageId=${payload.messageId} token=${redactedToken} fcmMsgId=${msgId}`,
-      );
+      await attemptSend();
     } catch (err) {
       if (isInvalidTokenError(err)) {
         this.logger.warn(
@@ -311,10 +299,7 @@ export class NotificationsService implements OnModuleInit {
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
       try {
-        const msgId = await attemptSend();
-        this.logger.log(
-          `Push sent (retry): requestId=${payload.requestId} messageId=${payload.messageId} token=${redactedToken} fcmMsgId=${msgId}`,
-        );
+        await attemptSend();
       } catch (retryErr) {
         this.logger.error(
           `push.send.failure (final): token=${redactedToken} requestId=${payload.requestId}`,
