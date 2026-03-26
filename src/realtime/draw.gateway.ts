@@ -438,6 +438,14 @@ export class DrawGateway
           userId,
         );
         if (peerId) {
+          const peerAlreadyInRoom = await this.isUserInRoom(peerId, roomId);
+          if (peerAlreadyInRoom) {
+            this.logger.debug(
+              `joinChat: skip draw.peer.waiting for requestId=${dto.requestId}; peer ${peerId} already in room ${roomId}`,
+            );
+            return;
+          }
+
           await this.emitToUser(peerId, 'draw.peer.waiting', {
             roomId,
             requestId: dto.requestId,
@@ -456,6 +464,19 @@ export class DrawGateway
     } catch (err) {
       this.emitError(client, err);
     }
+  }
+
+  private async isUserInRoom(userId: string, roomId: string): Promise<boolean> {
+    const socketId = await this.redisClient.hget(USER_SOCKET_KEY, userId);
+    if (!socketId) {
+      return false;
+    }
+
+    const currentRoom = await this.redisClient.hget(
+      `${SOCKET_META_KEY_PREFIX}:${socketId}`,
+      'currentRoom',
+    );
+    return currentRoom === roomId;
   }
 
   @SubscribeMessage('draw.leave')

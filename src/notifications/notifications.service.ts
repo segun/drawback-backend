@@ -120,6 +120,9 @@ export class NotificationsService implements OnModuleInit {
       lastSeenAt: now,
     });
     await this.pushTokenRepository.save(pushToken);
+    this.logger.log(
+      `push.token.created: userId=${userId} provider=${dto.provider} platform=${dto.platform} token=${dto.token.slice(0, 8)}...`,
+    );
   }
 
   async deactivateToken(
@@ -174,7 +177,7 @@ export class NotificationsService implements OnModuleInit {
     }
 
     for (const pushToken of tokens) {
-      await this.sendFcmMessage(pushToken, {
+      const sent = await this.sendFcmMessage(pushToken, {
         notification: {
           title: 'DrawBack Request',
           body: `${payload.senderName} sent you a draw request`,
@@ -190,6 +193,12 @@ export class NotificationsService implements OnModuleInit {
         requestId: payload.requestId,
         messageId: payload.messageId,
       });
+
+      if (sent) {
+        this.logger.log(
+          `push.sent: type=request_received from=${payload.senderUserId} to=${recipientUserId} requestId=${payload.requestId} messageId=${payload.messageId}`,
+        );
+      }
     }
   }
 
@@ -224,7 +233,7 @@ export class NotificationsService implements OnModuleInit {
     const messageId = `wait-${payload.requestId}-${payload.waitingUserId}`;
 
     for (const pushToken of tokens) {
-      await this.sendFcmMessage(pushToken, {
+      const sent = await this.sendFcmMessage(pushToken, {
         notification: {
           title: 'DrawBack Request',
           body: `${waitingName} is waiting in the chat room`,
@@ -241,6 +250,12 @@ export class NotificationsService implements OnModuleInit {
         requestId: payload.requestId,
         messageId,
       });
+
+      if (sent) {
+        this.logger.log(
+          `push.sent: type=peer_waiting from=${payload.waitingUserId} to=${recipientUserId} requestId=${payload.requestId} messageId=${messageId}`,
+        );
+      }
     }
   }
 
@@ -252,7 +267,7 @@ export class NotificationsService implements OnModuleInit {
       notification: { title: string; body: string };
       data: Record<string, string>;
     },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const redactedToken = `${pushToken.token.slice(0, 8)}...`;
 
     const message: admin.messaging.Message = {
@@ -298,13 +313,14 @@ export class NotificationsService implements OnModuleInit {
 
     try {
       await attemptSend();
+      return true;
     } catch (err) {
       if (isInvalidTokenError(err)) {
         this.logger.warn(
           `push.token.invalidated: token=${redactedToken} requestId=${payload.requestId}`,
         );
         await this.pushTokenRepository.delete({ id: pushToken.id });
-        return;
+        return false;
       }
 
       if (!isRetryableMessagingError(err)) {
@@ -312,7 +328,7 @@ export class NotificationsService implements OnModuleInit {
           `push.send.failure (non-retryable): token=${redactedToken} requestId=${payload.requestId}`,
           err,
         );
-        return;
+        return false;
       }
 
       // Transient error — one retry after 1 s
@@ -323,11 +339,13 @@ export class NotificationsService implements OnModuleInit {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       try {
         await attemptSend();
+        return true;
       } catch (retryErr) {
         this.logger.error(
           `push.send.failure (final): token=${redactedToken} requestId=${payload.requestId}`,
           retryErr,
         );
+        return false;
       }
     }
   }
