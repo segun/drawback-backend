@@ -63,6 +63,7 @@ describe('AuthService - Passkey Tests', () => {
     passwordHash: undefined,
     mode: UserMode.PRIVATE,
     role: UserRole.USER,
+    sessionVersion: 0,
   };
 
   const mockCredential: Partial<Credential> = {
@@ -82,6 +83,7 @@ describe('AuthService - Passkey Tests', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
+      increment: jest.fn().mockResolvedValue({ affected: 1 }),
       manager: {
         transaction: jest.fn(),
       },
@@ -426,6 +428,10 @@ describe('AuthService - Passkey Tests', () => {
         counter: 5,
         user: mockUser,
       } as any);
+      usersRepo.findOne.mockResolvedValue({
+        ...mockUser,
+        sessionVersion: 1,
+      } as User);
 
       mockVerifyAuthenticationResponse.mockResolvedValue({
         verified: true,
@@ -450,6 +456,10 @@ describe('AuthService - Passkey Tests', () => {
         counter: 0,
         user: mockUser,
       } as any);
+      usersRepo.findOne.mockResolvedValue({
+        ...mockUser,
+        sessionVersion: 1,
+      } as User);
 
       mockVerifyAuthenticationResponse.mockResolvedValue({
         verified: true,

@@ -38,6 +38,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Account has been blocked');
     }
 
+    if (payload.sessionVersion !== user.sessionVersion) {
+      throw new UnauthorizedException('Session expired. Please log in again.');
+    }
+
     return user;
   }
 }

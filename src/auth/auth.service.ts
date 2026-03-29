@@ -155,6 +155,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       role: user.role as string,
+      sessionVersion: user.sessionVersion,
     };
     const tempToken = this.jwtService.sign(payload, {
       expiresIn: '24h',
@@ -290,14 +291,7 @@ export class AuthService {
       throw new ForbiddenException('Account has been blocked');
     }
 
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      role: user.role as string,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
+    const accessToken = await this.issueSingleSessionAccessToken(user.id);
 
     // Check if this specific device already has a passkey registered.
     // If the client sends a deviceId, we check against it; otherwise we fall
@@ -746,16 +740,28 @@ export class AuthService {
     credential.lastUsedAt = new Date();
     await this.credentialsRepository.save(credential);
 
-    // Issue JWT token
+    // Issue JWT token and invalidate previous sessions for this user.
+    const accessToken = await this.issueSingleSessionAccessToken(user.id);
+    return { accessToken };
+  }
+
+  private async issueSingleSessionAccessToken(userId: string): Promise<string> {
+    await this.usersRepository.increment({ id: userId }, 'sessionVersion', 1);
+
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       displayName: user.displayName,
       role: user.role as string,
+      sessionVersion: user.sessionVersion,
     };
 
-    const accessToken = this.jwtService.sign(payload);
-    return { accessToken };
+    return this.jwtService.sign(payload);
   }
 
   /**

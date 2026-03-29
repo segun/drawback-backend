@@ -44,6 +44,7 @@ const alice = Object.assign(new User(), {
   email: 'alice@example.com',
   passwordHash: '$2b$12$hashed',
   displayName: '@alice',
+  sessionVersion: 0,
   isActivated: true,
   activationToken: 'should-be-excluded',
   mode: UserMode.PUBLIC,
@@ -55,6 +56,7 @@ const bob = Object.assign(new User(), {
   email: 'bob@example.com',
   passwordHash: '$2b$12$hashed',
   displayName: '@bob',
+  sessionVersion: 0,
   isActivated: true,
   activationToken: null,
   mode: UserMode.PUBLIC,
@@ -81,8 +83,54 @@ const qbMock = (count = 0, many: object[] = []) => ({
 });
 
 const usersRepo = {
-  findOne: jest.fn(),
+  findOne: jest.fn().mockImplementation(
+    ({ where }: { where?: Partial<User> } = {}) => {
+      if (!where) {
+        return Promise.resolve(null);
+      }
+
+      if (where.id === alice.id) {
+        return Promise.resolve(alice);
+      }
+      if (where.id === bob.id) {
+        return Promise.resolve(bob);
+      }
+      if (where.email === alice.email) {
+        return Promise.resolve(alice);
+      }
+      if (where.email === bob.email) {
+        return Promise.resolve(bob);
+      }
+      if (where.displayName === alice.displayName.toLowerCase()) {
+        return Promise.resolve(alice);
+      }
+      if (where.displayName === bob.displayName.toLowerCase()) {
+        return Promise.resolve(bob);
+      }
+
+      return Promise.resolve(null);
+    },
+  ),
   find: jest.fn().mockResolvedValue([alice, bob]),
+  increment: jest
+    .fn()
+    .mockImplementation(
+      (
+        criteria: { id?: string },
+        _field: string,
+        value: number,
+      ) => {
+        if (criteria.id === alice.id) {
+          alice.sessionVersion += value;
+          return Promise.resolve({ affected: 1 });
+        }
+        if (criteria.id === bob.id) {
+          bob.sessionVersion += value;
+          return Promise.resolve({ affected: 1 });
+        }
+        return Promise.resolve({ affected: 0 });
+      },
+    ),
   create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
     ...d,
     id: 'new-user',

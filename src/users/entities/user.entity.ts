@@ -64,6 +64,10 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role!: UserRole;
 
+  @Exclude()
+  @Column({ type: 'int', default: 0 })
+  sessionVersion!: number;
+
   @Column({ default: false })
   @Transform(({ value }) => Boolean(value))
   isBlocked!: boolean;

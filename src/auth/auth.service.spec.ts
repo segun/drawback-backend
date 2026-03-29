@@ -27,12 +27,14 @@ const mockUser = (): Partial<User> => ({
   isActivated: true,
   activationToken: null,
   mode: UserMode.PRIVATE,
+  sessionVersion: 0,
 });
 
 type MockedUsersRepo = {
   findOne: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
+  increment: jest.Mock;
   count: jest.Mock;
   find: jest.Mock;
 };
@@ -44,6 +46,7 @@ const repositoryMockFactory = (): MockedUsersRepo => ({
   findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
+  increment: jest.fn().mockResolvedValue({ affected: 1 }),
   count: jest.fn().mockResolvedValue(0),
   find: jest.fn().mockResolvedValue([]),
 });
@@ -197,13 +200,20 @@ describe('AuthService', () => {
 
     it('returns accessToken for valid credentials', async () => {
       const user = mockUser() as User;
-      usersRepo.findOne.mockResolvedValue(user);
+      usersRepo.findOne
+        .mockResolvedValueOnce(user)
+        .mockResolvedValueOnce({ ...user, sessionVersion: 1 } as User);
       credentialsRepo.find.mockResolvedValue([]);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       const result = await service.login(dto);
 
       expect(result?.accessToken).toBe('jwt-token');
+      expect(usersRepo.increment).toHaveBeenCalledWith(
+        { id: user.id },
+        'sessionVersion',
+        1,
+      );
       expect(jwtService.sign).toHaveBeenCalledWith(
         expect.objectContaining({ sub: user.id, email: user.email }),
       );

@@ -188,7 +188,8 @@ export class DrawGateway
   }
 
   async handleConnection(client: Socket): Promise<void> {
-    const userId = this.extractUserIdFromToken(client);
+    const payload = this.extractJwtPayloadFromToken(client);
+    const userId = payload?.sub;
 
     if (!userId) {
       client.emit('error', { message: 'Unauthorized' });
@@ -208,6 +209,24 @@ export class DrawGateway
       client.emit('error', { message: 'Account has been blocked' });
       client.disconnect();
       return;
+    }
+
+    if (!payload || payload.sessionVersion !== user.sessionVersion) {
+      client.emit('error', {
+        message: 'Session expired. Please log in again.',
+      });
+      client.disconnect();
+      return;
+    }
+
+    const previousSocketId = await this.redisClient.hget(
+      USER_SOCKET_KEY,
+      userId,
+    );
+    if (previousSocketId && previousSocketId !== client.id) {
+      // Disconnect the previous socket cluster-wide so only one active realtime
+      // session remains per user.
+      this.server.in(previousSocketId).disconnectSockets(true);
     }
 
     this.socketToUser.set(client.id, userId);
@@ -693,7 +712,7 @@ export class DrawGateway
   // Utilities
   // ---------------------------------------------------------------------------
 
-  private extractUserIdFromToken(client: Socket): string | null {
+  private extractJwtPayloadFromToken(client: Socket): JwtPayload | null {
     const auth = client.handshake.auth as Record<string, string | undefined>;
     const token: string | string[] | undefined =
       auth['token'] ??
@@ -705,8 +724,7 @@ export class DrawGateway
     }
 
     try {
-      const payload = this.jwtService.verify<JwtPayload>(token);
-      return payload.sub;
+      return this.jwtService.verify<JwtPayload>(token);
     } catch {
       return null;
     }
