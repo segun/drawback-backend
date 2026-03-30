@@ -412,23 +412,16 @@ export class DrawGateway
       // Collect user IDs of peers already in the room so the joining client
       // receives presence info immediately, without waiting for a separate
       // draw.peer.joined event (which only fires for the peers, not the joiner).
-      const roomSockets = await this.server.in(roomId).allSockets();
+      const roomSockets = await this.server.in(roomId).fetchSockets();
       const peers: string[] = [];
-      for (const socketId of roomSockets) {
-        if (socketId === client.id) continue;
-
-        // First check local cache (O(1) for sockets on this worker)
-        let peerId = this.socketToUser.get(socketId);
-
-        // If not found locally, check the reverse mapping in Redis
-        // (handles sockets connected to other workers in multi-process deployments)
-        if (!peerId) {
-          const redisResult = await this.redisClient.get(
-            `${SOCKET_USER_KEY_PREFIX}:${socketId}`,
-          );
-          peerId = redisResult ?? undefined;
-        }
-
+      const peerSocket = roomSockets.find((s) => s.id !== client.id);
+      if (peerSocket) {
+        const peerId =
+          this.socketToUser.get(peerSocket.id) ??
+          (await this.redisClient.get(
+            `${SOCKET_USER_KEY_PREFIX}:${peerSocket.id}`,
+          )) ??
+          undefined;
         if (peerId) peers.push(peerId);
       }
 
