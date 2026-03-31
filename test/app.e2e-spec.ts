@@ -26,6 +26,9 @@ import { Subscription } from './../src/users/entities/subscription.entity';
 import { UserMode } from './../src/users/enums/user-mode.enum';
 import { UsersModule } from './../src/users/users.module';
 import { SavedChat } from './../src/chat/entities/saved-chat.entity';
+import { GroupChat } from './../src/chat/entities/group-chat.entity';
+import { GroupChatMember } from './../src/chat/entities/group-chat-member.entity';
+import { GroupChatInvitation } from './../src/chat/entities/group-chat-invitation.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { DrawGateway } from './../src/realtime/draw.gateway';
 import { SessionEvent } from './../src/session-events/entities/session-event.entity';
@@ -83,8 +86,9 @@ const qbMock = (count = 0, many: object[] = []) => ({
 });
 
 const usersRepo = {
-  findOne: jest.fn().mockImplementation(
-    ({ where }: { where?: Partial<User> } = {}) => {
+  findOne: jest
+    .fn()
+    .mockImplementation(({ where }: { where?: Partial<User> } = {}) => {
       if (!where) {
         return Promise.resolve(null);
       }
@@ -109,17 +113,12 @@ const usersRepo = {
       }
 
       return Promise.resolve(null);
-    },
-  ),
+    }),
   find: jest.fn().mockResolvedValue([alice, bob]),
   increment: jest
     .fn()
     .mockImplementation(
-      (
-        criteria: { id?: string },
-        _field: string,
-        value: number,
-      ) => {
+      (criteria: { id?: string }, _field: string, value: number) => {
         if (criteria.id === alice.id) {
           alice.sessionVersion += value;
           return Promise.resolve({ affected: 1 });
@@ -183,6 +182,55 @@ const savedChatsRepo = {
     Promise.resolve({
       ...e,
       id: (e['id'] as string | undefined) ?? 'saved-new',
+    }),
+  ),
+  remove: jest.fn().mockResolvedValue({}),
+};
+
+const groupChatRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'group-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'group-new',
+    }),
+  ),
+  remove: jest.fn().mockResolvedValue({}),
+  createQueryBuilder: jest.fn(() => qbMock(0, [])),
+};
+
+const groupChatMembersRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'group-member-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'group-member-new',
+    }),
+  ),
+  remove: jest.fn().mockResolvedValue({}),
+};
+
+const groupChatInvitationsRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((d: Record<string, unknown>) => ({
+    ...d,
+    id: 'group-invite-new',
+  })),
+  save: jest.fn().mockImplementation((e: Record<string, unknown>) =>
+    Promise.resolve({
+      ...e,
+      id: (e['id'] as string | undefined) ?? 'group-invite-new',
     }),
   ),
   remove: jest.fn().mockResolvedValue({}),
@@ -276,6 +324,7 @@ const gatewayMock = {
   userToSocket: new Map(),
   socketToUser: new Map(),
   socketToRoom: new Map(),
+  notifyGroupDeleted: jest.fn(),
 };
 
 // ─── Minimal test module (no real DB, no real Socket.IO) ─────────────────────
@@ -321,6 +370,12 @@ describe('Drawback API (e2e)', () => {
       .useValue(appConfigRepo)
       .overrideProvider(getRepositoryToken(PushToken))
       .useValue(pushTokensRepo)
+      .overrideProvider(getRepositoryToken(GroupChat))
+      .useValue(groupChatRepo)
+      .overrideProvider(getRepositoryToken(GroupChatMember))
+      .useValue(groupChatMembersRepo)
+      .overrideProvider(getRepositoryToken(GroupChatInvitation))
+      .useValue(groupChatInvitationsRepo)
       .overrideProvider(CacheService)
       .useValue({
         get: jest.fn(),

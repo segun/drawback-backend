@@ -9,6 +9,9 @@ import { UserMode } from '../users/enums/user-mode.enum';
 import { ChatService } from './chat.service';
 import { ChatRequest } from './entities/chat-request.entity';
 import { SavedChat } from './entities/saved-chat.entity';
+import { GroupChat } from './entities/group-chat.entity';
+import { GroupChatMember } from './entities/group-chat-member.entity';
+import { GroupChatInvitation } from './entities/group-chat-invitation.entity';
 import { ChatRequestStatus } from './enums/chat-request-status.enum';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
@@ -48,6 +51,7 @@ type MockedDrawGateway = {
   notifyChatRequested: jest.Mock;
   notifyChatResponse: jest.Mock;
   forceCloseRoom: jest.Mock;
+  notifyGroupDeleted: jest.Mock;
 };
 
 type MockedNotificationsService = {
@@ -58,6 +62,9 @@ describe('ChatService', () => {
   let service: ChatService;
   let chatRequestRepo: ReturnType<typeof repoMock>;
   let savedChatsRepo: ReturnType<typeof repoMock>;
+  let groupChatRepo: ReturnType<typeof repoMock>;
+  let groupChatMemberRepo: ReturnType<typeof repoMock>;
+  let groupChatInvitationRepo: ReturnType<typeof repoMock>;
   let usersService: MockedUsersService;
   let drawGateway: MockedDrawGateway;
   let notificationsService: MockedNotificationsService;
@@ -65,12 +72,24 @@ describe('ChatService', () => {
   beforeEach(async () => {
     chatRequestRepo = repoMock();
     savedChatsRepo = repoMock();
+    groupChatRepo = repoMock();
+    groupChatMemberRepo = repoMock();
+    groupChatInvitationRepo = repoMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
         { provide: getRepositoryToken(ChatRequest), useValue: chatRequestRepo },
         { provide: getRepositoryToken(SavedChat), useValue: savedChatsRepo },
+        { provide: getRepositoryToken(GroupChat), useValue: groupChatRepo },
+        {
+          provide: getRepositoryToken(GroupChatMember),
+          useValue: groupChatMemberRepo,
+        },
+        {
+          provide: getRepositoryToken(GroupChatInvitation),
+          useValue: groupChatInvitationRepo,
+        },
         {
           provide: UsersService,
           useValue: {
@@ -85,6 +104,7 @@ describe('ChatService', () => {
             notifyChatRequested: jest.fn(),
             notifyChatResponse: jest.fn(),
             forceCloseRoom: jest.fn(),
+            notifyGroupDeleted: jest.fn(),
           },
         },
         {
@@ -139,7 +159,7 @@ describe('ChatService', () => {
         toUser.id,
         expect.objectContaining({ requestId: 'req-1', senderName: '@alice' }),
       );
-      expect(result.id).toBe('req-1');
+      expect(result?.id).toBe('req-1');
     });
 
     it('throws BadRequestException when chatting with self', async () => {
@@ -215,8 +235,8 @@ describe('ChatService', () => {
         accept: true,
       });
 
-      expect(result.request.status).toBe(ChatRequestStatus.ACCEPTED);
-      expect(result.roomId).toBe('chat:req-1');
+      expect(result?.request.status).toBe(ChatRequestStatus.ACCEPTED);
+      expect(result?.roomId).toBe('chat:req-1');
       expect(drawGateway.notifyChatResponse).toHaveBeenCalledTimes(2);
     });
 
@@ -232,7 +252,7 @@ describe('ChatService', () => {
         accept: false,
       });
 
-      expect(result.roomId).toBeNull();
+      expect(result?.roomId).toBeNull();
     });
 
     it('throws ForbiddenException when non-recipient tries to respond', async () => {
@@ -317,7 +337,7 @@ describe('ChatService', () => {
       const result = await service.saveChat('req-1', 'user-1');
 
       expect(savedChatsRepo.save).toHaveBeenCalledTimes(1);
-      expect(result.id).toBe('saved-1');
+      expect(result?.id).toBe('saved-1');
     });
 
     it('is idempotent when chat is already saved', async () => {

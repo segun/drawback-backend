@@ -33,6 +33,7 @@ import { DrawClearDto } from './dto/draw-clear.dto';
 import { DrawEmoteDto } from './dto/draw-emote.dto';
 import { DrawStrokeDto } from './dto/draw-stroke.dto';
 import { JoinChatDto } from './dto/join-chat.dto';
+import { JoinGroupDto } from './dto/join-group.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 
 /** Max draw.clear events allowed per socket per 5 seconds. */
@@ -329,6 +330,34 @@ export class DrawGateway
     void this.emitToUser(userId, 'chat.response', payload);
   }
 
+  notifyGroupMemberAdded(
+    userId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    void this.emitToUser(userId, 'group.member.added', payload);
+  }
+
+  notifyGroupInvite(userId: string, payload: Record<string, unknown>): void {
+    void this.emitToUser(userId, 'group.invite', payload);
+  }
+
+  notifyGroupInviteResponse(
+    userId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    void this.emitToUser(userId, 'group.invite.response', payload);
+  }
+
+  /**
+   * Notify all members of a group that it has been deleted by the owner, then
+   * force-close the room. The client can distinguish this from a 1-on-1 close
+   * by listening for the `group.deleted` event.
+   */
+  async notifyGroupDeleted(groupId: string, roomId: string): Promise<void> {
+    this.server.to(roomId).emit('group.deleted', { groupId });
+    await this.forceCloseRoom(roomId);
+  }
+
   /**
    * Force all participants in a room to leave and notify them that the room has
    * been closed. Used when a user blocks another or deletes a chat while in an
@@ -373,6 +402,85 @@ export class DrawGateway
     }
 
     this.logger.debug(`Force closed room: ${roomId}`);
+  }
+
+  /**
+   * Remove a single user from a room without closing it for everyone else.
+   * Used when a member is removed from a group chat.
+   */
+  async forceRemoveUserFromRoom(userId: string, roomId: string): Promise<void> {
+    const socketId = await this.redisClient.hget(USER_SOCKET_KEY, userId);
+    if (!socketId) return;
+
+    this.server.in(socketId).socketsLeave(roomId);
+
+    if (this.socketToRoom.get(socketId) === roomId) {
+      this.socketToRoom.delete(socketId);
+    }
+
+    // Notify the removed socket that it has been removed
+    this.server.to(socketId).emit('group.removed', {
+      roomId,
+      reason: 'You have been removed from the group',
+    });
+
+    // Notify remaining room members
+    this.server.to(roomId).emit('group.member.left', { userId });
+
+    this.logger.debug(
+      `Removed user ${userId} (socket ${socketId}) from room ${roomId}`,
+    );
+  }
+
+  @SubscribeMessage('group.join')
+  async joinGroup(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: JoinGroupDto,
+  ): Promise<void> {
+    try {
+      const userId = this.getAuthenticatedUserId(client);
+
+      const roomId = await this.chatService.getGroupRoomForMember(
+        dto.groupId,
+        userId,
+      );
+
+      // Leave any previous room first
+      const prevRoom = this.socketToRoom.get(client.id);
+      if (prevRoom && prevRoom !== roomId) {
+        await client.leave(prevRoom);
+        client.to(prevRoom).emit('draw.peer.left', { userId });
+      }
+
+      await client.join(roomId);
+      this.socketToRoom.set(client.id, roomId);
+
+      // Update currentRoom in Redis metadata
+      const metaKey = `${SOCKET_META_KEY_PREFIX}:${client.id}`;
+      await Promise.all([
+        this.redisClient.hset(metaKey, 'currentRoom', roomId),
+        this.redisClient.expire(metaKey, SOCKET_META_TTL_SECONDS),
+      ]);
+
+      // Collect peers already in the room
+      const roomSockets = await this.server.in(roomId).fetchSockets();
+      const peers: string[] = [];
+      for (const s of roomSockets) {
+        if (s.id === client.id) continue;
+        const peerId =
+          this.socketToUser.get(s.id) ??
+          (await this.redisClient.get(`${SOCKET_USER_KEY_PREFIX}:${s.id}`)) ??
+          undefined;
+        if (peerId) peers.push(peerId);
+      }
+
+      client.emit('group.joined', { roomId, groupId: dto.groupId, peers });
+
+      // Notify others in the room
+      client.to(roomId).emit('group.member.joined', { userId });
+    } catch (err) {
+      this.emitError(client, err);
+    }
   }
 
   @SubscribeMessage('chat.join')

@@ -1,6 +1,11 @@
-import { IsUUID } from 'class-validator';
+import { IsOptional, IsUUID } from 'class-validator';
 
 export class DrawClearDto {
+  @IsOptional()
   @IsUUID()
-  requestId!: string;
+  requestId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
 }

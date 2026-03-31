@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class EnforceSinglePushTokenPerUserProvider1774302000000
-  implements MigrationInterface
-{
+export class EnforceSinglePushTokenPerUserProvider1774302000000 implements MigrationInterface {
   name = 'EnforceSinglePushTokenPerUserProvider1774302000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

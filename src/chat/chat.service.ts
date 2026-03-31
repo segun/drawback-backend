@@ -11,9 +11,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateChatRequestDto } from './dto/create-chat-request.dto';
 import { RespondChatRequestDto } from './dto/respond-chat-request.dto';
+import { AddGroupMemberDto } from './dto/add-group-member.dto';
+import { CreateGroupDto } from './dto/create-group.dto';
+import { RespondGroupInvitationDto } from './dto/respond-group-invitation.dto';
 import { ChatRequest } from './entities/chat-request.entity';
 import { SavedChat } from './entities/saved-chat.entity';
+import { GroupChat } from './entities/group-chat.entity';
+import { GroupChatMember } from './entities/group-chat-member.entity';
+import { GroupChatInvitation } from './entities/group-chat-invitation.entity';
 import { ChatRequestStatus } from './enums/chat-request-status.enum';
+import { GroupMemberRole } from './enums/group-member-role.enum';
+import { GroupInvitationStatus } from './enums/group-invitation-status.enum';
 import { DrawGateway } from '../realtime/draw.gateway';
 import { UsersService } from '../users/users.service';
 import { UserMode } from '../users/enums/user-mode.enum';
@@ -26,6 +34,12 @@ export class ChatService {
     private readonly chatRequestRepository: Repository<ChatRequest>,
     @InjectRepository(SavedChat)
     private readonly savedChatsRepository: Repository<SavedChat>,
+    @InjectRepository(GroupChat)
+    private readonly groupChatRepository: Repository<GroupChat>,
+    @InjectRepository(GroupChatMember)
+    private readonly groupChatMemberRepository: Repository<GroupChatMember>,
+    @InjectRepository(GroupChatInvitation)
+    private readonly groupChatInvitationRepository: Repository<GroupChatInvitation>,
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     @Inject(forwardRef(() => DrawGateway))
@@ -375,5 +389,295 @@ export class ChatService {
       const roomId = this.buildRoomId(chat.id);
       await this.drawGateway.forceCloseRoom(roomId);
     }
+  }
+
+  // ── Group chat ───────────────────────────────────────────────────────────
+
+  async createGroup(
+    creatorId: string,
+    dto: CreateGroupDto,
+  ): Promise<GroupChat> {
+    const group = this.groupChatRepository.create({
+      name: dto.name,
+      createdByUserId: creatorId,
+    });
+    const savedGroup = await this.groupChatRepository.save(group);
+
+    const ownerMember = this.groupChatMemberRepository.create({
+      groupChatId: savedGroup.id,
+      userId: creatorId,
+      role: GroupMemberRole.OWNER,
+    });
+    await this.groupChatMemberRepository.save(ownerMember);
+
+    return this.getGroupById(savedGroup.id) as Promise<GroupChat>;
+  }
+
+  async inviteMember(
+    groupId: string,
+    requesterId: string,
+    dto: AddGroupMemberDto,
+  ): Promise<GroupChatInvitation> {
+    const group = await this.getGroupById(groupId);
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    const requesterMembership = group.members.find(
+      (m) => m.userId === requesterId,
+    );
+    if (!requesterMembership) {
+      throw new ForbiddenException('You are not a member of this group');
+    }
+    if (requesterMembership.role !== GroupMemberRole.OWNER) {
+      throw new ForbiddenException('Only the group owner can invite members');
+    }
+
+    const targetUser = await this.usersService.findByDisplayName(
+      dto.displayName,
+    );
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const alreadyMember = group.members.some((m) => m.userId === targetUser.id);
+    if (alreadyMember) {
+      throw new BadRequestException('User is already a member of this group');
+    }
+
+    const blocked = await this.usersService.isBlocked(
+      requesterId,
+      targetUser.id,
+    );
+    if (blocked) {
+      throw new ForbiddenException('Cannot invite this user');
+    }
+
+    const existingInvite = await this.groupChatInvitationRepository.findOne({
+      where: {
+        groupChatId: groupId,
+        inviteeUserId: targetUser.id,
+        status: GroupInvitationStatus.PENDING,
+      },
+    });
+    if (existingInvite) {
+      throw new BadRequestException(
+        'A pending invitation already exists for this user',
+      );
+    }
+
+    const invitation = this.groupChatInvitationRepository.create({
+      groupChatId: groupId,
+      inviterUserId: requesterId,
+      inviteeUserId: targetUser.id,
+      status: GroupInvitationStatus.PENDING,
+    });
+    const savedInvitation =
+      await this.groupChatInvitationRepository.save(invitation);
+
+    const requester = await this.usersService.findById(requesterId);
+
+    // Notify the invitee via socket
+    this.drawGateway.notifyGroupInvite(targetUser.id, {
+      invitationId: savedInvitation.id,
+      groupId,
+      groupName: group.name,
+      inviterUserId: requesterId,
+      inviterName: requester?.displayName ?? 'Someone',
+    });
+
+    // Send push notification to the invitee
+    void this.notificationsService.sendGroupInvitePush(targetUser.id, {
+      invitationId: savedInvitation.id,
+      groupId,
+      groupName: group.name,
+      inviterName: requester?.displayName ?? 'Someone',
+      messageId: `grp-inv-${savedInvitation.id}`,
+    });
+
+    return savedInvitation;
+  }
+
+  async respondToGroupInvitation(
+    invitationId: string,
+    userId: string,
+    dto: RespondGroupInvitationDto,
+  ): Promise<GroupChatInvitation> {
+    const invitation = await this.groupChatInvitationRepository.findOne({
+      where: { id: invitationId },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.inviteeUserId !== userId) {
+      throw new ForbiddenException('Only the invitee can respond');
+    }
+
+    if (invitation.status !== GroupInvitationStatus.PENDING) {
+      throw new BadRequestException('Invitation has already been responded to');
+    }
+
+    invitation.status = dto.accept
+      ? GroupInvitationStatus.ACCEPTED
+      : GroupInvitationStatus.REJECTED;
+    await this.groupChatInvitationRepository.save(invitation);
+
+    if (dto.accept) {
+      const group = await this.getGroupById(invitation.groupChatId);
+      if (!group) {
+        throw new NotFoundException('Group no longer exists');
+      }
+
+      const alreadyMember = group.members.some((m) => m.userId === userId);
+      if (!alreadyMember) {
+        const member = this.groupChatMemberRepository.create({
+          groupChatId: invitation.groupChatId,
+          userId,
+          role: GroupMemberRole.MEMBER,
+        });
+        await this.groupChatMemberRepository.save(member);
+      }
+
+      // Notify the inviter that the invitation was accepted
+      const invitee = await this.usersService.findById(userId);
+      this.drawGateway.notifyGroupInviteResponse(invitation.inviterUserId, {
+        invitationId,
+        groupId: invitation.groupChatId,
+        groupName: group.name,
+        inviteeUserId: userId,
+        inviteeName: invitee?.displayName ?? 'Someone',
+        accepted: true,
+      });
+    } else {
+      // Notify the inviter that the invitation was rejected
+      const group = await this.getGroupById(invitation.groupChatId);
+      const invitee = await this.usersService.findById(userId);
+      this.drawGateway.notifyGroupInviteResponse(invitation.inviterUserId, {
+        invitationId,
+        groupId: invitation.groupChatId,
+        groupName: group?.name ?? '',
+        inviteeUserId: userId,
+        inviteeName: invitee?.displayName ?? 'Someone',
+        accepted: false,
+      });
+    }
+
+    return invitation;
+  }
+
+  async getPendingGroupInvitations(
+    userId: string,
+  ): Promise<GroupChatInvitation[]> {
+    return this.groupChatInvitationRepository.find({
+      where: { inviteeUserId: userId, status: GroupInvitationStatus.PENDING },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async removeMember(
+    groupId: string,
+    requesterId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    const group = await this.getGroupById(groupId);
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    const requesterMembership = group.members.find(
+      (m) => m.userId === requesterId,
+    );
+    if (!requesterMembership) {
+      throw new ForbiddenException('You are not a member of this group');
+    }
+
+    // Owner can remove anyone; a member can only remove themselves
+    if (
+      requesterMembership.role !== GroupMemberRole.OWNER &&
+      requesterId !== targetUserId
+    ) {
+      throw new ForbiddenException('Only the group owner can remove members');
+    }
+
+    if (targetUserId === group.createdByUserId) {
+      throw new BadRequestException('The group owner cannot be removed');
+    }
+
+    const membership = group.members.find((m) => m.userId === targetUserId);
+    if (!membership) {
+      throw new NotFoundException('User is not a member of this group');
+    }
+
+    await this.groupChatMemberRepository.remove(membership);
+
+    // Force the removed user's socket out of the room
+    const roomId = this.buildGroupRoomId(groupId);
+    await this.drawGateway.forceRemoveUserFromRoom(targetUserId, roomId);
+  }
+
+  async deleteGroup(groupId: string, requesterId: string): Promise<void> {
+    const group = await this.getGroupById(groupId);
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    if (group.createdByUserId !== requesterId) {
+      throw new ForbiddenException('Only the group owner can delete the group');
+    }
+
+    const roomId = this.buildGroupRoomId(groupId);
+    await this.drawGateway.notifyGroupDeleted(groupId, roomId);
+
+    await this.groupChatRepository.remove(group);
+  }
+
+  async getUserGroups(userId: string): Promise<GroupChat[]> {
+    const memberships = await this.groupChatMemberRepository.find({
+      where: { userId },
+    });
+    if (memberships.length === 0) return [];
+
+    const groupIds = memberships.map((m) => m.groupChatId);
+    return this.groupChatRepository
+      .createQueryBuilder('g')
+      .leftJoinAndSelect('g.members', 'members')
+      .leftJoinAndSelect('members.user', 'user')
+      .leftJoinAndSelect('g.createdBy', 'createdBy')
+      .where('g.id IN (:...groupIds)', { groupIds })
+      .orderBy('g.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async getGroupById(groupId: string): Promise<GroupChat | null> {
+    return this.groupChatRepository
+      .createQueryBuilder('g')
+      .leftJoinAndSelect('g.members', 'members')
+      .leftJoinAndSelect('members.user', 'user')
+      .leftJoinAndSelect('g.createdBy', 'createdBy')
+      .where('g.id = :groupId', { groupId })
+      .getOne();
+  }
+
+  async getGroupRoomForMember(
+    groupId: string,
+    userId: string,
+  ): Promise<string> {
+    const group = await this.getGroupById(groupId);
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    const isMember = group.members.some((m) => m.userId === userId);
+    if (!isMember) {
+      throw new ForbiddenException('You are not a member of this group');
+    }
+
+    return this.buildGroupRoomId(groupId);
+  }
+
+  buildGroupRoomId(groupId: string): string {
+    return `group:${groupId}`;
   }
 }

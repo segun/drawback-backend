@@ -7,11 +7,20 @@ import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatRequest } from './entities/chat-request.entity';
 import { SavedChat } from './entities/saved-chat.entity';
+import { GroupChat } from './entities/group-chat.entity';
+import { GroupChatMember } from './entities/group-chat-member.entity';
+import { GroupChatInvitation } from './entities/group-chat-invitation.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatRequest, SavedChat]),
+    TypeOrmModule.forFeature([
+      ChatRequest,
+      SavedChat,
+      GroupChat,
+      GroupChatMember,
+      GroupChatInvitation,
+    ]),
     forwardRef(() => AuthModule),
     forwardRef(() => UsersModule),
     forwardRef(() => RealtimeModule),

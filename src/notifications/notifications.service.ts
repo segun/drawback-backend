@@ -356,6 +356,116 @@ export class NotificationsService implements OnModuleInit {
     );
   }
 
+  async sendGroupMemberAddedPush(
+    recipientUserId: string,
+    payload: {
+      groupId: string;
+      groupName: string;
+      addedByName: string;
+      messageId: string;
+    },
+  ): Promise<void> {
+    if (!this.canSendPush()) {
+      return;
+    }
+
+    const tokens = await this.pushTokenRepository.find({
+      where: {
+        userId: recipientUserId,
+        active: true,
+        provider: PushProvider.FCM,
+      },
+      order: { updatedAt: 'DESC' },
+      take: 1,
+    });
+
+    if (tokens.length === 0) {
+      return;
+    }
+
+    for (const pushToken of tokens) {
+      const sent = await this.sendFcmMessage(pushToken, {
+        notification: {
+          title: 'Added to a group',
+          body: `${payload.addedByName} added you to "${payload.groupName}"`,
+        },
+        data: {
+          schemaVersion: '1',
+          type: 'group_member_added',
+          groupId: payload.groupId,
+          groupName: payload.groupName,
+          addedByName: payload.addedByName,
+          route: 'group_chat',
+          messageId: payload.messageId,
+        },
+        requestId: payload.groupId,
+        messageId: payload.messageId,
+      });
+
+      if (sent) {
+        this.logger.log(
+          `push.sent: type=group_member_added to=${recipientUserId} groupId=${payload.groupId} messageId=${payload.messageId}`,
+        );
+      }
+    }
+  }
+
+  async sendGroupInvitePush(
+    recipientUserId: string,
+    payload: {
+      invitationId: string;
+      groupId: string;
+      groupName: string;
+      inviterName: string;
+      messageId: string;
+    },
+  ): Promise<void> {
+    if (!this.canSendPush()) {
+      return;
+    }
+
+    const tokens = await this.pushTokenRepository.find({
+      where: {
+        userId: recipientUserId,
+        active: true,
+        provider: PushProvider.FCM,
+      },
+      order: { updatedAt: 'DESC' },
+      take: 1,
+    });
+
+    if (tokens.length === 0) {
+      return;
+    }
+
+    for (const pushToken of tokens) {
+      const sent = await this.sendFcmMessage(pushToken, {
+        notification: {
+          title: 'Group invitation',
+          body: `${payload.inviterName} invited you to join "${payload.groupName}"`,
+        },
+        data: {
+          schemaVersion: '1',
+          type: 'group_invite',
+          invitationId: payload.invitationId,
+          groupId: payload.groupId,
+          groupName: payload.groupName,
+          inviterName: payload.inviterName,
+          route: 'group_invite',
+          messageId: payload.messageId,
+        },
+        requestId: payload.groupId,
+        messageId: payload.messageId,
+      });
+
+      if (sent) {
+        this.logger.log(
+          `push.sent: type=group_invite to=${recipientUserId} groupId=${payload.groupId} invitationId=${payload.invitationId} messageId=${payload.messageId}`,
+        );
+      }
+    }
+  }
+
   private canSendPush(): boolean {
     if (!this.isPushEnabled()) {
       return false;

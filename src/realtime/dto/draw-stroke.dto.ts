@@ -1,4 +1,5 @@
 import {
+  IsOptional,
   IsUUID,
   ValidateNested,
   IsString,
@@ -48,8 +49,13 @@ class StrokeDataDto {
 }
 
 export class DrawStrokeDto {
+  @IsOptional()
   @IsUUID()
-  requestId!: string;
+  requestId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
 
   @ValidateNested()
   @Type(() => StrokeDataDto)

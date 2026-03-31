@@ -5,6 +5,9 @@ import { UserBlock } from './users/entities/user-block.entity';
 import { Subscription } from './users/entities/subscription.entity';
 import { ChatRequest } from './chat/entities/chat-request.entity';
 import { SavedChat } from './chat/entities/saved-chat.entity';
+import { GroupChat } from './chat/entities/group-chat.entity';
+import { GroupChatMember } from './chat/entities/group-chat-member.entity';
+import { GroupChatInvitation } from './chat/entities/group-chat-invitation.entity';
 import { AdminAuditLog } from './admin/entities/admin-audit-log.entity';
 import { AppleNotification } from './purchases/entities/apple-notification.entity';
 import { PushToken } from './notifications/entities/push-token.entity';
@@ -28,6 +31,9 @@ export default new DataSource({
     Subscription,
     ChatRequest,
     SavedChat,
+    GroupChat,
+    GroupChatMember,
+    GroupChatInvitation,
     AdminAuditLog,
     AppleNotification,
     PushToken,
